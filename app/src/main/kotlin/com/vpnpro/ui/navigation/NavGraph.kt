@@ -23,9 +23,9 @@ fun NavGraph() {
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
-                vm              = vm,
-                onOpenServers   = { navController.navigate(Routes.SERVERS) },
-                onOpenSettings  = { navController.navigate(Routes.SETTINGS) }
+                vm             = vm,
+                onOpenServers  = { navController.navigate(Routes.SERVERS) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) }
             )
         }
         composable(Routes.SERVERS) {

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -27,9 +28,11 @@ import com.vpnpro.ui.viewmodel.MainViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
-    val loading  by vm.addServerLoading.collectAsState()
-    val error    by vm.addServerError.collectAsState()
-    val success  by vm.addServerSuccess.collectAsState()
+    val loading by vm.addServerLoading.collectAsState()
+    val error   by vm.addServerError.collectAsState()
+    val success by vm.addServerSuccess.collectAsState()
+
+    val clipboard = LocalClipboardManager.current
 
     // Form fields
     var name             by remember { mutableStateOf("") }
@@ -42,9 +45,67 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
     var dns              by remember { mutableStateOf("1.1.1.1, 1.0.0.1") }
     var allowedIPs       by remember { mutableStateOf("0.0.0.0/0, ::/0") }
     var preSharedKey     by remember { mutableStateOf("") }
+    var mtuValue         by remember { mutableStateOf("1420") }
     var addedBy          by remember { mutableStateOf("") }
     var showPrivKey      by remember { mutableStateOf(false) }
     var showPSK          by remember { mutableStateOf(false) }
+
+    // Import from clipboard dialog
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importText       by remember { mutableStateOf("") }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            icon = { Icon(Icons.Default.ContentPaste, null, tint = AccentCyan) },
+            title = { Text("Import WireGuard Config") },
+            text = {
+                Column {
+                    Text(
+                        "Paste a WireGuard config file here (the [Interface] + [Peer] block).",
+                        fontSize = 13.sp, color = OnSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = importText,
+                        onValueChange = { importText = it },
+                        placeholder = { Text("[Interface]\nPrivateKey = …\n\n[Peer]\nPublicKey = …", fontSize = 12.sp, color = OnSurfaceMuted) },
+                        minLines = 6, maxLines = 10,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentCyan,
+                            unfocusedBorderColor = Surface3,
+                            focusedTextColor = OnSurface, unfocusedTextColor = OnSurface,
+                            focusedContainerColor = Surface1, unfocusedContainerColor = Surface1
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        val clip = clipboard.getText()?.toString() ?: ""
+                        if (clip.isNotBlank()) importText = clip
+                    }) {
+                        Icon(Icons.Default.ContentPaste, null, Modifier.size(16.dp), tint = AccentCyan)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Paste from clipboard", color = AccentCyan, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (importText.isNotBlank()) {
+                            vm.importServerFromConfig(importText, name.ifBlank { "Imported Server" })
+                            showImportDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                    enabled = importText.isNotBlank()
+                ) { Text("Import") }
+            },
+            dismissButton = { TextButton(onClick = { showImportDialog = false }) { Text("Cancel") } },
+            containerColor = Surface2
+        )
+    }
 
     // Navigate back on success
     LaunchedEffect(success) {
@@ -54,26 +115,56 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF0A0E1A), Color(0xFF0D1526))))
+            .background(Brush.verticalGradient(listOf(BgDark, BgMid)))
     ) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
-            // ── Top bar ──────────────────────────────────────────
+            // ── Top bar ────────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, null, tint = OnSurface)
-                }
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = OnSurface) }
                 Text(
                     "Add Server",
                     fontWeight = FontWeight.Bold, fontSize = 20.sp, color = OnSurface,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
+                // Import from config button
+                FilledTonalButton(
+                    onClick = { showImportDialog = true },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = AccentCyan.copy(alpha = 0.12f),
+                        contentColor = AccentCyan
+                    )
+                ) {
+                    Icon(Icons.Default.FileDownload, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Import", fontSize = 13.sp)
+                }
+                Spacer(Modifier.width(8.dp))
             }
-            Divider(color = Surface3, thickness = 0.5.dp)
+            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
 
-            // ── Form ──────────────────────────────────────────────
+            // ── Error banner ───────────────────────────────────
+            if (error != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ErrorOutline, null, tint = AccentRed, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(error ?: "", color = AccentRed, fontSize = 13.sp)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = vm::clearAddServerResult, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, null, tint = AccentRed, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            // ── Form ───────────────────────────────────────────
             Column(
                 Modifier
                     .weight(1f)
@@ -83,212 +174,157 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
             ) {
                 SectionHeader("Basic Info", Icons.Default.Info)
 
-                ProField(label = "Server Name *", value = name, onValueChange = { name = it },
-                    placeholder = "e.g. Germany-01", icon = Icons.Default.Label)
-                ProField(label = "Flag Emoji", value = flag, onValueChange = { flag = it },
-                    placeholder = "🌐", icon = Icons.Default.Flag)
-                ProField(label = "Location", value = location, onValueChange = { location = it },
-                    placeholder = "e.g. Frankfurt", icon = Icons.Default.LocationOn)
-                ProField(label = "Your Name (optional)", value = addedBy, onValueChange = { addedBy = it },
-                    placeholder = "Who added this server", icon = Icons.Default.Person)
+                ProField("Server Name *", name,          { name = it },             "e.g. Germany-01",              Icons.Default.Label)
+                ProField("Flag Emoji",    flag,           { flag = it },             "🌐",                           Icons.Default.Flag)
+                ProField("Location",      location,       { location = it },         "e.g. Frankfurt",               Icons.Default.LocationOn)
+                ProField("Added by",      addedBy,        { addedBy = it },          "Your name or nickname",        Icons.Default.Person)
 
-                Spacer(Modifier.height(4.dp))
-                SectionHeader("WireGuard Config", Icons.Default.Security)
+                SectionHeader("Connection", Icons.Default.Wifi)
 
-                ProField(
-                    label = "Endpoint *",
-                    value = endpoint, onValueChange = { endpoint = it },
-                    placeholder = "1.2.3.4:51820",
-                    icon = Icons.Default.Dns,
-                    keyboardType = KeyboardType.Uri
-                )
-                ProField(
-                    label = "Server Public Key *",
-                    value = serverPublicKey, onValueChange = { serverPublicKey = it },
-                    placeholder = "Base64 public key of the server",
-                    icon = Icons.Default.VpnKey
-                )
-                ProFieldPassword(
-                    label = "Client Private Key *",
+                ProField("Endpoint (host:port) *", endpoint, { endpoint = it },
+                    "e.g. 1.2.3.4:51820 or vpn.example.com:51820", Icons.Default.Dns,
+                    keyboardType = KeyboardType.Uri)
+
+                SectionHeader("WireGuard Keys", Icons.Default.Key)
+
+                // Server public key
+                ProField("Server Public Key *", serverPublicKey, { serverPublicKey = it },
+                    "Base64 public key (44 chars)", Icons.Default.VpnKey, maxLines = 2)
+
+                // Client private key with show/hide
+                OutlinedTextField(
                     value = clientPrivateKey, onValueChange = { clientPrivateKey = it },
-                    placeholder = "Base64 private key for this slot",
-                    icon = Icons.Default.Key,
-                    visible = showPrivKey,
-                    onToggle = { showPrivKey = !showPrivKey }
-                )
-                ProField(
-                    label = "Client Address *",
-                    value = clientAddress, onValueChange = { clientAddress = it },
-                    placeholder = "10.0.0.2/32",
-                    icon = Icons.Default.Router,
-                    keyboardType = KeyboardType.Uri
-                )
-                ProField(
-                    label = "DNS",
-                    value = dns, onValueChange = { dns = it },
-                    placeholder = "1.1.1.1, 1.0.0.1",
-                    icon = Icons.Default.Public
-                )
-                ProField(
-                    label = "Allowed IPs",
-                    value = allowedIPs, onValueChange = { allowedIPs = it },
-                    placeholder = "0.0.0.0/0, ::/0",
-                    icon = Icons.Default.FilterList
-                )
-                ProFieldPassword(
-                    label = "Pre-Shared Key (optional)",
-                    value = preSharedKey, onValueChange = { preSharedKey = it },
-                    placeholder = "Leave empty if not used",
-                    icon = Icons.Default.Lock,
-                    visible = showPSK,
-                    onToggle = { showPSK = !showPSK }
-                )
-
-                // Help box
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AccentCyan.copy(0.08f)),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Default.Info, null, Modifier.size(18.dp), tint = AccentCyan)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            "Generate the client private key on your WireGuard server:\n" +
-                            "wg genkey > client.key && wg pubkey < client.key > client.pub\n\n" +
-                            "Add the client public key to your server config, then paste " +
-                            "the client private key here.",
-                            fontSize = 12.sp,
-                            color = AccentCyan.copy(0.85f),
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
-
-                // Error
-                error?.let {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AccentRed.copy(0.12f)),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ErrorOutline, null, Modifier.size(18.dp), tint = AccentRed)
-                            Spacer(Modifier.width(8.dp))
-                            Text(it, color = AccentRed, fontSize = 13.sp)
+                    label = { Text("Client Private Key *", fontSize = 12.sp) },
+                    placeholder = { Text("Base64 private key (44 chars)", fontSize = 13.sp, color = OnSurfaceMuted) },
+                    leadingIcon = { Icon(Icons.Default.Lock, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
+                    trailingIcon = {
+                        IconButton(onClick = { showPrivKey = !showPrivKey }) {
+                            Icon(
+                                if (showPrivKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                null, Modifier.size(18.dp), tint = OnSurfaceVariant
+                            )
                         }
-                    }
-                }
+                    },
+                    visualTransformation = if (showPrivKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    maxLines = 2,
+                    colors = fieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                Spacer(Modifier.height(8.dp))
+                // Pre-shared key (optional)
+                OutlinedTextField(
+                    value = preSharedKey, onValueChange = { preSharedKey = it },
+                    label = { Text("Pre-Shared Key (optional)", fontSize = 12.sp) },
+                    placeholder = { Text("Leave blank if not used", fontSize = 13.sp, color = OnSurfaceMuted) },
+                    leadingIcon = { Icon(Icons.Default.Shield, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
+                    trailingIcon = {
+                        IconButton(onClick = { showPSK = !showPSK }) {
+                            Icon(
+                                if (showPSK) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                null, Modifier.size(18.dp), tint = OnSurfaceVariant
+                            )
+                        }
+                    },
+                    visualTransformation = if (showPSK) VisualTransformation.None else PasswordVisualTransformation(),
+                    maxLines = 2,
+                    colors = fieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
+                SectionHeader("Network Settings", Icons.Default.NetworkCheck)
+
+                ProField("Client Address",  clientAddress, { clientAddress = it }, "e.g. 10.0.0.2/32", Icons.Default.Computer)
+                ProField("DNS",             dns,            { dns = it },           "e.g. 1.1.1.1, 8.8.8.8", Icons.Default.DnsOutlined)
+                ProField("Allowed IPs",     allowedIPs,    { allowedIPs = it },    "0.0.0.0/0, ::/0 = route all traffic", Icons.Default.Route)
+                ProField("MTU",             mtuValue,       { mtuValue = it },      "1420 (recommended)", Icons.Default.Tune, keyboardType = KeyboardType.Number)
+
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // ── Bottom save button ─────────────────────────────
+            Surface(color = BgDark, shadowElevation = 8.dp) {
                 Button(
                     onClick = {
                         vm.addServer(
                             Server(
-                                name            = name.trim(),
-                                flag            = flag.trim().ifBlank { "🌐" },
-                                location        = location.trim(),
-                                endpoint        = endpoint.trim(),
-                                serverPublicKey = serverPublicKey.trim(),
-                                clientPrivateKey= clientPrivateKey.trim(),
-                                clientAddress   = clientAddress.trim(),
-                                dns             = dns.trim(),
-                                allowedIPs      = allowedIPs.trim(),
-                                preSharedKey    = preSharedKey.trim(),
-                                addedBy         = addedBy.trim()
+                                name             = name.trim(),
+                                flag             = flag.trim().ifBlank { "🌐" },
+                                location         = location.trim(),
+                                endpoint         = endpoint.trim(),
+                                serverPublicKey  = serverPublicKey.trim(),
+                                clientPrivateKey = clientPrivateKey.trim(),
+                                clientAddress    = clientAddress.trim(),
+                                dns              = dns.trim(),
+                                allowedIPs       = allowedIPs.trim(),
+                                preSharedKey     = preSharedKey.trim(),
+                                mtu              = mtuValue.toIntOrNull() ?: 1420,
+                                addedBy          = addedBy.trim(),
+                                addedAt          = System.currentTimeMillis()
                             )
                         )
                     },
-                    enabled = !loading && name.isNotBlank() && endpoint.isNotBlank()
-                            && serverPublicKey.isNotBlank() && clientPrivateKey.isNotBlank()
-                            && clientAddress.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AccentCyan,
-                        disabledContainerColor = AccentCyan.copy(alpha = 0.3f)
-                    )
+                    enabled = !loading && name.isNotBlank() && endpoint.isNotBlank() &&
+                              serverPublicKey.isNotBlank() && clientPrivateKey.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                    shape = MaterialTheme.shapes.large
                 ) {
                     if (loading) {
-                        CircularProgressIndicator(Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.5.dp)
                     } else {
-                        Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp), tint = Color.Black)
+                        Icon(Icons.Default.CloudUpload, null, Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Add Server", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Save & Share Server", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
-
-                Spacer(Modifier.height(24.dp))
             }
         }
     }
 }
 
 @Composable
-private fun SectionHeader(text: String, icon: ImageVector) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Icon(icon, null, Modifier.size(16.dp), tint = AccentCyan)
+        Spacer(Modifier.width(6.dp))
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AccentCyan)
         Spacer(Modifier.width(8.dp))
-        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = AccentCyan)
+        HorizontalDivider(color = Surface3, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun ProField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String = "",
-    icon: ImageVector,
-    keyboardType: KeyboardType = KeyboardType.Text
+    label: String, value: String, onValueChange: (String) -> Unit,
+    placeholder: String, icon: ImageVector,
+    keyboardType: KeyboardType = KeyboardType.Text, maxLines: Int = 1
 ) {
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label, fontSize = 13.sp) },
-        placeholder = { Text(placeholder, color = OnSurfaceMuted, fontSize = 13.sp) },
-        leadingIcon = { Icon(icon, null, Modifier.size(18.dp), tint = OnSurfaceVariant) },
+        value = value, onValueChange = onValueChange,
+        label = { Text(label, fontSize = 12.sp) },
+        placeholder = { Text(placeholder, fontSize = 13.sp, color = OnSurfaceMuted) },
+        leadingIcon = { Icon(icon, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
+        singleLine = maxLines == 1,
+        maxLines = maxLines,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AccentCyan,
-            focusedLabelColor  = AccentCyan,
-            cursorColor        = AccentCyan,
-            unfocusedBorderColor = Surface3,
-            unfocusedLabelColor  = OnSurfaceVariant,
-            focusedTextColor     = OnSurface,
-            unfocusedTextColor   = OnSurface
-        ),
-        shape = MaterialTheme.shapes.medium
+        colors = fieldColors(),
+        modifier = Modifier.fillMaxWidth()
     )
 }
 
 @Composable
-private fun ProFieldPassword(
-    label: String, value: String, onValueChange: (String) -> Unit,
-    placeholder: String = "", icon: ImageVector, visible: Boolean, onToggle: () -> Unit
-) {
-    OutlinedTextField(
-        value = value, onValueChange = onValueChange,
-        label = { Text(label, fontSize = 13.sp) },
-        placeholder = { Text(placeholder, color = OnSurfaceMuted, fontSize = 13.sp) },
-        leadingIcon = { Icon(icon, null, Modifier.size(18.dp), tint = OnSurfaceVariant) },
-        trailingIcon = {
-            IconButton(onClick = onToggle) {
-                Icon(
-                    if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    null, tint = OnSurfaceVariant
-                )
-            }
-        },
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AccentCyan, focusedLabelColor = AccentCyan,
-            cursorColor = AccentCyan, unfocusedBorderColor = Surface3,
-            unfocusedLabelColor = OnSurfaceVariant,
-            focusedTextColor = OnSurface, unfocusedTextColor = OnSurface
-        ),
-        shape = MaterialTheme.shapes.medium
-    )
-}
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor   = AccentCyan,
+    unfocusedBorderColor = Surface3,
+    focusedTextColor     = OnSurface,
+    unfocusedTextColor   = OnSurface,
+    focusedContainerColor   = Surface1,
+    unfocusedContainerColor = Surface1,
+    focusedLabelColor    = AccentCyan
+)

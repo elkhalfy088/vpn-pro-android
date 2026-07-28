@@ -2,18 +2,31 @@ package com.vpnpro.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand palette
-val AccentCyan   = Color(0xFF00D4FF)
-val AccentGreen  = Color(0xFF00E676)
-val AccentRed    = Color(0xFFFF5252)
-val AccentYellow = Color(0xFFFFD740)
+// ── Backgrounds ──────────────────────────────────────────────
+val BgDeep    = Color(0xFF070B17)
+val BgDark    = Color(0xFF0A0E1A)
+val BgMid     = Color(0xFF0D1526)
 
-// Dark surface layers
-val Surface0 = Color(0xFF0A0E1A)   // deepest background
-val Surface1 = Color(0xFF111827)   // card background
-val Surface2 = Color(0xFF1C2438)   // elevated card
-val Surface3 = Color(0xFF243047)   // border / divider highlight
+// ── Surfaces ─────────────────────────────────────────────────
+val Surface1  = Color(0xFF111827)
+val Surface2  = Color(0xFF1A2235)
+val Surface3  = Color(0xFF243048)
 
-val OnSurface        = Color(0xFFE2E8F0)
-val OnSurfaceVariant = Color(0xFF8A97B0)
-val OnSurfaceMuted   = Color(0xFF4A5568)
+// ── On-surface text ──────────────────────────────────────────
+val OnSurface        = Color(0xFFE8EDF5)
+val OnSurfaceVariant = Color(0xFF8A9BBF)
+val OnSurfaceMuted   = Color(0xFF4D5E80)
+
+// ── Accent colours ───────────────────────────────────────────
+val AccentCyan    = Color(0xFF00D4FF)
+val AccentBlue    = Color(0xFF2979FF)
+val AccentGreen   = Color(0xFF00E676)
+val AccentOrange  = Color(0xFFFF6D00)
+val AccentRed     = Color(0xFFFF1744)
+val AccentPurple  = Color(0xFFAA00FF)
+
+// ── Semantic colours ─────────────────────────────────────────
+val Connected     = AccentGreen
+val Connecting    = AccentCyan
+val Disconnected  = OnSurfaceMuted
+val Error         = AccentRed

@@ -1,30 +1,30 @@
 package com.vpnpro.ui.theme
 
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
+private val DarkColors = darkColorScheme(
     primary          = AccentCyan,
-    onPrimary        = Color(0xFF001F2E),
-    secondary        = AccentGreen,
-    onSecondary      = Color(0xFF00210B),
-    tertiary         = AccentYellow,
-    background       = Surface0,
+    onPrimary        = BgDeep,
+    secondary        = AccentBlue,
+    onSecondary      = BgDeep,
+    tertiary         = AccentGreen,
+    background       = BgDark,
     onBackground     = OnSurface,
     surface          = Surface1,
     onSurface        = OnSurface,
     surfaceVariant   = Surface2,
     onSurfaceVariant = OnSurfaceVariant,
-    outline          = Surface3,
     error            = AccentRed,
+    onError          = BgDeep,
+    outline          = Surface3
 )
 
 @Composable
 fun VpnProTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = DarkColorScheme,
-        typography  = Typography(),
+        colorScheme = DarkColors,
         content     = content
     )
 }

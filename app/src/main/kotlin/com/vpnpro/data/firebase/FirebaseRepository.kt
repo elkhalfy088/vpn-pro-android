@@ -3,7 +3,8 @@ package com.vpnpro.data.firebase
 import com.google.firebase.database.*
 import com.vpnpro.data.model.Server
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,18 +15,13 @@ class FirebaseRepository @Inject constructor() {
     private val db = FirebaseDatabase.getInstance()
     private val serversRef = db.getReference("servers")
 
-    /** Real-time stream of all servers */
     fun serversFlow(): Flow<List<Server>> = callbackFlow {
         val listener = object : ValueEventListener {
-            override fun onDataChange(snap: DataSnapshot) {
+            override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<Server>()
-                snap.children.forEach { child ->
-                    try {
-                        @Suppress("UNCHECKED_CAST")
-                        val map = child.value as? Map<String, Any?> ?: return@forEach
-                        val server = Server.fromMap(child.key ?: "", map)
-                        if (server.enabled) list.add(server)
-                    } catch (_: Exception) {}
+                for (child in snapshot.children) {
+                    val s = child.getValue(Server::class.java)
+                    if (s != null) list.add(s.copy(id = child.key ?: s.id))
                 }
                 trySend(list.sortedByDescending { it.addedAt })
             }
@@ -37,16 +33,31 @@ class FirebaseRepository @Inject constructor() {
         awaitClose { serversRef.removeEventListener(listener) }
     }
 
-    /** Add a new server — visible to all users immediately */
     suspend fun addServer(server: Server) {
-        val key = serversRef.push().key
-            ?: throw IllegalStateException("Failed to generate server key — check Firebase connection")
-        val newServer = server.copy(id = key)
-        serversRef.child(key).setValue(newServer.toMap()).await()
+        val key = if (server.id.isBlank()) serversRef.push().key ?: return else server.id
+        serversRef.child(key).setValue(server.copy(id = key)).await()
     }
 
-    /** Toggle server enabled state */
-    suspend fun setServerEnabled(id: String, enabled: Boolean) {
-        serversRef.child(id).child("enabled").setValue(enabled).await()
+    suspend fun updateServer(server: Server) {
+        require(server.id.isNotBlank()) { "Server id required for update" }
+        serversRef.child(server.id).setValue(server).await()
+    }
+
+    suspend fun deleteServer(serverId: String) {
+        require(serverId.isNotBlank()) { "Server id required for delete" }
+        serversRef.child(serverId).removeValue().await()
+    }
+
+    suspend fun incrementUsage(serverId: String) {
+        if (serverId.isBlank()) return
+        val ref = serversRef.child(serverId).child("usageCount")
+        ref.runTransaction(object : Transaction.Handler {
+            override fun doTransaction(data: MutableData): Transaction.Result {
+                val current = data.getValue(Int::class.java) ?: 0
+                data.value = current + 1
+                return Transaction.success(data)
+            }
+            override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {}
+        })
     }
 }

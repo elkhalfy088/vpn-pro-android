@@ -1,71 +1,94 @@
 package com.vpnpro.data.model
 
+import com.google.firebase.database.IgnoreExtraProperties
+
+@IgnoreExtraProperties
 data class Server(
     val id: String = "",
     val name: String = "",
     val flag: String = "🌐",
     val location: String = "",
-    // WireGuard connection info
-    val endpoint: String = "",          // host:port e.g. "1.2.3.4:51820"
-    val serverPublicKey: String = "",   // server's WireGuard public key
-    val clientPrivateKey: String = "",  // client private key (shared for this server slot)
-    val clientAddress: String = "",     // e.g. "10.0.0.2/32"
+    val endpoint: String = "",
+    val serverPublicKey: String = "",
+    val clientPrivateKey: String = "",
+    val clientAddress: String = "10.0.0.2/32",
     val dns: String = "1.1.1.1, 1.0.0.1",
     val allowedIPs: String = "0.0.0.0/0, ::/0",
-    val preSharedKey: String = "",      // optional
+    val preSharedKey: String = "",
     val addedBy: String = "",
     val addedAt: Long = 0L,
-    val enabled: Boolean = true,
-    val ping: Int = -1                  // -1 = not measured
+    val usageCount: Int = 0,
+    val isPremium: Boolean = false,
+    val mtu: Int = 1420,
+    val persistentKeepalive: Int = 25,
+    val category: String = "General"
 ) {
-    /** Convert to WireGuard config file format */
+    /** Generate WireGuard config text from this server */
     fun toWireGuardConfig(): String = buildString {
         appendLine("[Interface]")
         appendLine("PrivateKey = $clientPrivateKey")
         appendLine("Address = $clientAddress")
-        appendLine("DNS = $dns")
+        appendLine("DNS = ${dns.replace(" ", "")}")
+        appendLine("MTU = $mtu")
         appendLine()
         appendLine("[Peer]")
         appendLine("PublicKey = $serverPublicKey")
         if (preSharedKey.isNotBlank()) appendLine("PresharedKey = $preSharedKey")
         appendLine("Endpoint = $endpoint")
         appendLine("AllowedIPs = $allowedIPs")
-        appendLine("PersistentKeepalive = 25")
+        appendLine("PersistentKeepalive = $persistentKeepalive")
     }
 
-    fun toMap(): Map<String, Any> = mapOf(
-        "id" to id,
-        "name" to name,
-        "flag" to flag,
-        "location" to location,
-        "endpoint" to endpoint,
-        "serverPublicKey" to serverPublicKey,
-        "clientPrivateKey" to clientPrivateKey,
-        "clientAddress" to clientAddress,
-        "dns" to dns,
-        "allowedIPs" to allowedIPs,
-        "preSharedKey" to preSharedKey,
-        "addedBy" to addedBy,
-        "addedAt" to addedAt,
-        "enabled" to enabled
-    )
-
+    /** Parse a WireGuard config text into a Server object */
     companion object {
-        fun fromMap(id: String, map: Map<String, Any?>): Server = Server(
-            id              = id,
-            name            = map["name"] as? String ?: "",
-            flag            = map["flag"] as? String ?: "🌐",
-            location        = map["location"] as? String ?: "",
-            endpoint        = map["endpoint"] as? String ?: "",
-            serverPublicKey = map["serverPublicKey"] as? String ?: "",
-            clientPrivateKey= map["clientPrivateKey"] as? String ?: "",
-            clientAddress   = map["clientAddress"] as? String ?: "",
-            dns             = map["dns"] as? String ?: "1.1.1.1",
-            allowedIPs      = map["allowedIPs"] as? String ?: "0.0.0.0/0",
-            preSharedKey    = map["preSharedKey"] as? String ?: "",
-            addedBy         = map["addedBy"] as? String ?: "",
-            addedAt         = map["addedAt"] as? Long ?: 0L,
-            enabled         = map["enabled"] as? Boolean ?: true
-        )
+        fun fromWireGuardConfig(config: String, name: String = "Imported Server"): Server? {
+            return try {
+                val lines = config.lines().map { it.trim() }
+                var privateKey = ""
+                var address = "10.0.0.2/32"
+                var dns = "1.1.1.1, 1.0.0.1"
+                var mtu = 1420
+                var publicKey = ""
+                var psk = ""
+                var endpoint = ""
+                var allowedIPs = "0.0.0.0/0, ::/0"
+                var keepalive = 25
+
+                for (line in lines) {
+                    when {
+                        line.startsWith("PrivateKey") -> privateKey = line.substringAfter("=").trim()
+                        line.startsWith("Address")    -> address    = line.substringAfter("=").trim()
+                        line.startsWith("DNS")        -> dns        = line.substringAfter("=").trim()
+                        line.startsWith("MTU")        -> mtu        = line.substringAfter("=").trim().toIntOrNull() ?: 1420
+                        line.startsWith("PublicKey")  -> publicKey  = line.substringAfter("=").trim()
+                        line.startsWith("PresharedKey")-> psk       = line.substringAfter("=").trim()
+                        line.startsWith("Endpoint")   -> endpoint   = line.substringAfter("=").trim()
+                        line.startsWith("AllowedIPs") -> allowedIPs = line.substringAfter("=").trim()
+                        line.startsWith("PersistentKeepalive") -> keepalive = line.substringAfter("=").trim().toIntOrNull() ?: 25
+                    }
+                }
+
+                if (privateKey.isBlank() || publicKey.isBlank() || endpoint.isBlank()) return null
+
+                Server(
+                    id = "imported_${System.currentTimeMillis()}",
+                    name = name,
+                    flag = "🌐",
+                    location = endpoint.substringBefore(":"),
+                    endpoint = endpoint,
+                    serverPublicKey = publicKey,
+                    clientPrivateKey = privateKey,
+                    clientAddress = address,
+                    dns = dns,
+                    allowedIPs = allowedIPs,
+                    preSharedKey = psk,
+                    mtu = mtu,
+                    persistentKeepalive = keepalive,
+                    addedAt = System.currentTimeMillis()
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
     }
 }

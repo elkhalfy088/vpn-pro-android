@@ -1,16 +1,17 @@
 package com.vpnpro.ui.screens
 
-import android.app.Activity
-import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,148 +19,151 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vpnpro.ui.theme.*
 import com.vpnpro.ui.viewmodel.MainViewModel
-import com.vpnpro.utils.FormatUtils
 import com.vpnpro.vpn.VpnState
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import com.vpnpro.utils.FormatUtils
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     vm: MainViewModel,
     onOpenServers: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    val ctx            = LocalContext.current
     val vpnState       by vm.vpnState.collectAsState()
     val vpnStats       by vm.vpnStats.collectAsState()
     val selectedServer by vm.selectedServer.collectAsState()
-    val servers        by vm.servers.collectAsState()
+    val lastError      by vm.lastError.collectAsState()
+    val connName       by vm.connectedServerName.collectAsState()
 
-    // Auto-select first server
-    LaunchedEffect(servers) {
-        if (selectedServer == null && servers.isNotEmpty()) {
-            vm.selectServer(servers.first())
+    val elapsed by produceState(0L, vpnStats.connectedSince) {
+        if (vpnStats.connectedSince == 0L) { value = 0L; return@produceState }
+        while (true) {
+            value = System.currentTimeMillis() - vpnStats.connectedSince
+            kotlinx.coroutines.delay(1000)
         }
-    }
-
-    // Connection timer
-    var elapsed by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(vpnState) {
-        if (vpnState == VpnState.CONNECTED) {
-            elapsed = 0L
-            while (isActive) { delay(1000); elapsed++ }
-        } else { elapsed = 0L }
     }
 
     // VPN permission launcher
-    val permissionLauncher = rememberLauncherForActivityResult(
+    val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) vm.connect()
-    }
+    ) { vm.connect() }
 
-    fun onConnectClick() {
-        when (vpnState) {
-            VpnState.CONNECTED, VpnState.CONNECTING -> vm.disconnect()
-            else -> {
-                val intent = VpnService.prepare(ctx)
-                if (intent != null) permissionLauncher.launch(intent)
-                else vm.connect()
-            }
-        }
+    // Pulsing animation for CONNECTING state
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+
+    val buttonScale = if (vpnState == VpnState.CONNECTING) pulseScale else 1f
+
+    val ringColor by animateColorAsState(
+        targetValue = when (vpnState) {
+            VpnState.CONNECTED   -> AccentGreen
+            VpnState.CONNECTING  -> AccentCyan
+            VpnState.ERROR       -> AccentRed
+            else                 -> Surface3
+        },
+        animationSpec = tween(600),
+        label = "ringColor"
+    )
+
+    val stateLabel = when (vpnState) {
+        VpnState.CONNECTED      -> "🔒  Connected"
+        VpnState.CONNECTING     -> "⏳  Connecting…"
+        VpnState.DISCONNECTING  -> "⏳  Disconnecting…"
+        VpnState.ERROR          -> "❌  Error"
+        else                    -> "🔓  Not Connected"
     }
 
     val stateColor = when (vpnState) {
-        VpnState.CONNECTED    -> AccentGreen
-        VpnState.CONNECTING   -> AccentYellow
-        VpnState.ERROR        -> AccentRed
-        VpnState.DISCONNECTED -> Color(0xFF4A5568)
+        VpnState.CONNECTED  -> AccentGreen
+        VpnState.CONNECTING -> AccentCyan
+        VpnState.ERROR      -> AccentRed
+        else                -> OnSurfaceMuted
     }
-
-    val stateLabel = when (vpnState) {
-        VpnState.CONNECTED    -> "Protected"
-        VpnState.CONNECTING   -> "Connecting…"
-        VpnState.ERROR        -> "Failed"
-        VpnState.DISCONNECTED -> "Not Protected"
-    }
-
-    // Pulse animation
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by pulse.animateFloat(
-        initialValue  = 1f,
-        targetValue   = 1.12f,
-        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOut), RepeatMode.Reverse),
-        label = "scale"
-    )
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF0A0E1A), Color(0xFF0D1526), Color(0xFF0A0E1A))
-                )
-            )
+            .background(Brush.verticalGradient(listOf(BgDark, BgMid)))
     ) {
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
-                .padding(horizontal = 24.dp),
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Top bar ──────────────────────────────────────────
+            // ── Top bar ───────────────────────────────────────
             Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     "VPN Pro",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp,
-                    color = AccentCyan
+                    color = OnSurface,
+                    modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Outlined.Settings, null, tint = OnSurfaceVariant)
+                    Icon(Icons.Default.Settings, null, tint = OnSurfaceVariant)
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
 
-            // ── Big connect button ────────────────────────────────
-            val btnScale = if (vpnState == VpnState.CONNECTED) pulseScale else 1f
-            Box(
-                Modifier.size(220.dp).scale(btnScale),
-                contentAlignment = Alignment.Center
-            ) {
+            // ── Big connect button ────────────────────────────
+            Box(contentAlignment = Alignment.Center) {
                 // Outer glow ring
                 Surface(
                     shape = CircleShape,
-                    color = stateColor.copy(alpha = 0.08f),
-                    modifier = Modifier.size(220.dp)
+                    color = ringColor.copy(alpha = 0.12f),
+                    modifier = Modifier.size(200.dp).scale(buttonScale)
                 ) {}
                 // Middle ring
                 Surface(
                     shape = CircleShape,
-                    color = stateColor.copy(alpha = 0.15f),
-                    modifier = Modifier.size(176.dp)
+                    color = ringColor.copy(alpha = 0.22f),
+                    modifier = Modifier.size(168.dp).scale(buttonScale)
                 ) {}
-                // Inner button
+                // Button
                 Button(
-                    onClick = ::onConnectClick,
+                    onClick = {
+                        when (vpnState) {
+                            VpnState.CONNECTED, VpnState.CONNECTING -> vm.disconnect()
+                            else -> {
+                                if (selectedServer == null) { onOpenServers(); return@Button }
+                                if (vm.needsVpnPermission()) {
+                                    val intent = android.net.VpnService.prepare(
+                                        androidx.compose.ui.platform.LocalContext.current ?: return@Button
+                                    ) ?: return@Button
+                                    permLauncher.launch(intent)
+                                } else {
+                                    vm.connect()
+                                }
+                            }
+                        }
+                    },
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = stateColor),
-                    modifier = Modifier.size(136.dp),
-                    elevation = ButtonDefaults.buttonElevation(12.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = when (vpnState) {
+                            VpnState.CONNECTED, VpnState.CONNECTING -> AccentRed.copy(alpha = 0.85f)
+                            VpnState.ERROR -> AccentOrange.copy(alpha = 0.85f)
+                            else -> AccentCyan.copy(alpha = 0.9f)
+                        }
+                    ),
+                    modifier = Modifier.size(132.dp).scale(buttonScale),
+                    elevation = ButtonDefaults.buttonElevation(8.dp)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
@@ -168,16 +172,19 @@ fun HomeScreen(
                                 else -> Icons.Default.PowerSettingsNew
                             },
                             contentDescription = null,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(44.dp),
                             tint = Color.White
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            if (vpnState == VpnState.CONNECTED || vpnState == VpnState.CONNECTING)
-                                "Stop" else "Start",
+                            when (vpnState) {
+                                VpnState.CONNECTED  -> "Stop"
+                                VpnState.CONNECTING -> "Cancel"
+                                else -> "Start"
+                            },
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
+                            fontSize = 16.sp
                         )
                     }
                 }
@@ -186,72 +193,91 @@ fun HomeScreen(
             Spacer(Modifier.height(20.dp))
 
             // State label
-            Text(stateLabel, color = stateColor, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Text(stateLabel, color = stateColor, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
 
             // Timer
             if (vpnState == VpnState.CONNECTED) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     FormatUtils.formatDuration(elapsed),
-                    color = OnSurfaceVariant, fontSize = 20.sp, fontWeight = FontWeight.Medium
+                    color = OnSurfaceVariant, fontSize = 22.sp, fontWeight = FontWeight.Medium
                 )
             }
 
-            Spacer(Modifier.height(32.dp))
+            // Error message
+            if (vpnState == VpnState.ERROR && lastError != null) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ErrorOutline, null, tint = AccentRed, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(lastError ?: "", color = AccentRed, fontSize = 13.sp)
+                    }
+                }
+            }
 
-            // ── Stats row (only when connected) ───────────────────
+            Spacer(Modifier.height(28.dp))
+
+            // ── Stats row (only when connected) ───────────────
             if (vpnState == VpnState.CONNECTED) {
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    StatCard(
-                        "↑ Upload",
-                        FormatUtils.formatBytes(vpnStats.bytesOut),
-                        Modifier.weight(1f)
-                    )
-                    StatCard(
-                        "↓ Download",
-                        FormatUtils.formatBytes(vpnStats.bytesIn),
-                        Modifier.weight(1f)
-                    )
+                    StatCard("↑ Upload",   FormatUtils.formatBytes(vpnStats.bytesOut), Modifier.weight(1f))
+                    StatCard("↓ Download", FormatUtils.formatBytes(vpnStats.bytesIn),  Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(16.dp))
             }
 
-            // ── Selected server card ──────────────────────────────
+            // ── Selected server card ──────────────────────────
             Card(
                 onClick = onOpenServers,
                 shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = Surface2),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
             ) {
                 Row(
                     Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (selectedServer != null) {
-                        Text(selectedServer!!.flag, fontSize = 32.sp)
+                        Text(selectedServer!!.flag, fontSize = 34.sp)
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
                                 selectedServer!!.name,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp,
-                                color = OnSurface
+                                fontSize = 16.sp, color = OnSurface
                             )
                             Text(
                                 selectedServer!!.location.ifBlank { selectedServer!!.endpoint },
-                                fontSize = 13.sp,
-                                color = OnSurfaceVariant
+                                fontSize = 13.sp, color = OnSurfaceVariant
                             )
+                            // WireGuard badge
+                            Spacer(Modifier.height(4.dp))
+                            Surface(
+                                color = AccentCyan.copy(alpha = 0.15f),
+                                shape = MaterialTheme.shapes.small
+                            ) {
+                                Text(
+                                    "  WireGuard  ",
+                                    fontSize = 10.sp,
+                                    color = AccentCyan,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
                         }
                     } else {
-                        Icon(Icons.Outlined.Dns, null, tint = OnSurfaceVariant, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Outlined.Dns, null, tint = OnSurfaceVariant, modifier = Modifier.size(30.dp))
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Select a Server", fontWeight = FontWeight.SemiBold, color = OnSurface)
-                            Text("Tap to choose", fontSize = 13.sp, color = OnSurfaceVariant)
+                            Text("Tap to choose a VPN server", fontSize = 13.sp, color = OnSurfaceVariant)
                         }
                     }
                     Icon(Icons.Default.ChevronRight, null, tint = OnSurfaceVariant)
@@ -259,9 +285,13 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(16.dp))
 
-            // ── Bottom shortcut ────────────────────────────────────
-            TextButton(onClick = onOpenServers, modifier = Modifier.padding(bottom = 12.dp)) {
+            // ── Bottom shortcut ───────────────────────────────
+            TextButton(
+                onClick = onOpenServers,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
                 Icon(Icons.Default.Dns, null, Modifier.size(16.dp), tint = AccentCyan)
                 Spacer(Modifier.width(6.dp))
                 Text("Manage Servers", color = AccentCyan, fontSize = 14.sp)

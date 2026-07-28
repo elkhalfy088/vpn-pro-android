@@ -1,6 +1,24 @@
-# VPN Pro — Android App
+# VPN Pro — Android App v2.0
 
 تطبيق VPN حقيقي يعمل بـ WireGuard + Firebase للمشاركة الفورية للسيرفرات بين جميع المستخدمين.
+يمرّر **جميع ترافيك الإنترنت** (صور، فيديو، أي موقع أو تطبيق) عبر السيرفر.
+
+---
+
+## 🆕 الجديد في v2.0
+
+| الميزة | الوصف |
+|--------|-------|
+| 🗑️ **حذف السيرفرات** | احذف أي سيرفر بضغطة واحدة مع تأكيد |
+| ✏️ **تعديل السيرفرات** | عدّل الاسم والموقع والبيانات الأساسية |
+| 📋 **استيراد Config** | الصق إعدادات WireGuard مباشرة من النص أو الحافظة |
+| 🔍 **بحث في السيرفرات** | ابحث عن سيرفر بالاسم أو الموقع |
+| 🛡️ **Kill Switch** | يقطع الإنترنت تلقائياً إذا انقطع VPN |
+| 👥 **عداد الاستخدام** | يظهر كم مستخدم اتصل بكل سيرفر |
+| 🌐 **DNS متعدد** | اختر: Cloudflare / Google / Quad9 / AdGuard |
+| 🎨 **واجهة محسّنة** | تصميم جديد مع تحريكات وألوان أفضل |
+| ⚠️ **رسائل خطأ واضحة** | تظهر سبب فشل الاتصال بوضوح |
+| ⚙️ **MTU قابل للتخصيص** | لحل مشاكل الاتصال على بعض الشبكات |
 
 ---
 
@@ -28,7 +46,7 @@
 ### الخطوة 2 — إعداد Firebase Realtime Database
 
 1. في Firebase Console → **Build → Realtime Database → Create database**
-2. اختر منطقة قريبة → ابدأ بـ **Test mode** (أو انسخ قواعد الأمان من `firebase-rules.json`)
+2. اختر منطقة قريبة → ابدأ بـ **Test mode**
 3. اذهب إلى **Rules** والصق محتوى `firebase-rules.json` ثم اضغط **Publish**
 
 ### الخطوة 3 — بناء التطبيق
@@ -37,18 +55,15 @@
 # افتح Android Studio → Open → اختر هذا المجلد
 # انتظر Gradle sync (~2 دقائق)
 
-# أو من سطر الأوامر:
-./gradlew assembleDebug
-
 # APK الناتج:
 # app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ---
 
-## 🌐 إعداد سيرفر WireGuard
+## 🌐 إعداد سيرفر WireGuard (مطلوب لتجاوز القيود)
 
-لكي يشتغل الاتصال الحقيقي، تحتاج سيرفر VPS مع WireGuard:
+لكي يشتغل الاتصال الحقيقي ويمر **كل الترافيك** (صور + فيديو + أي موقع)، تحتاج سيرفر VPS:
 
 ```bash
 # تثبيت WireGuard (Ubuntu/Debian)
@@ -71,7 +86,6 @@ PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING 
 PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 
 [Peer]
-# Client (generated from app)
 PublicKey = <CLIENT_PUBLIC_KEY>
 AllowedIPs = 10.0.0.2/32
 ```
@@ -87,33 +101,9 @@ sudo systemctl enable --now wg-quick@wg0
 
 ---
 
-## ➕ توليد مفاتيح العميل وإضافة سيرفر
-
-```bash
-# على السيرفر — توليد مفتاح للعميل
-wg genkey | tee client.key | wg pubkey > client.pub
-
-cat client.key  # ← هذا CLIENT_PRIVATE_KEY (يُدخل في التطبيق)
-cat client.pub  # ← هذا CLIENT_PUBLIC_KEY (يُضاف لـ wg0.conf كـ [Peer])
-cat /etc/wireguard/server_public.key  # ← SERVER_PUBLIC_KEY
-```
-
-أضف الـ [Peer] للسيرفر:
-```ini
-[Peer]
-PublicKey = <CLIENT_PUBLIC_KEY>
-AllowedIPs = 10.0.0.2/32
-```
-
-```bash
-sudo wg syncconf wg0 <(sudo wg-quick strip wg0)
-```
-
----
-
 ## 📱 إضافة سيرفر من داخل التطبيق
 
-افتح التطبيق → **Servers → Add (+)**، أدخل:
+**طريقة 1 — يدوي (Servers → Add):**
 
 | الحقل | القيمة |
 |-------|--------|
@@ -125,9 +115,18 @@ sudo wg syncconf wg0 <(sudo wg-quick strip wg0)
 | Client Private Key | محتوى `client.key` |
 | Client Address | `10.0.0.2/32` |
 | DNS | `1.1.1.1, 1.0.0.1` |
-| Allowed IPs | `0.0.0.0/0, ::/0` |
+| Allowed IPs | `0.0.0.0/0, ::/0` ← **مهم: لتمرير كل الترافيك** |
 
-بعد الإضافة ← يظهر السيرفر **لجميع المستخدمين** فوراً.
+**طريقة 2 — استيراد Config (Servers → Add → Import):**
+- الصق محتوى ملف `.conf` مباشرة في حقل الاستيراد
+
+---
+
+## ⚙️ إعدادات مهمة
+
+- **Allowed IPs = `0.0.0.0/0, ::/0`** → يمرّر كل الترافيك (صور + فيديو + كل موقع)
+- **Kill Switch** → يقطع الإنترنت إذا انقطع VPN (يمنع تسريب IP)
+- **DNS** → اختر Cloudflare (1.1.1.1) أو Quad9 (9.9.9.9) لأسرع DNS وأكثر أمناً
 
 ---
 
@@ -135,22 +134,22 @@ sudo wg syncconf wg0 <(sudo wg-quick strip wg0)
 
 ```
 app/src/main/kotlin/com/vpnpro/
-├── VpnProApp.kt                  ← Application class (Hilt)
-├── MainActivity.kt               ← نقطة الدخول
+├── VpnProApp.kt
+├── MainActivity.kt
 ├── data/
-│   ├── model/Server.kt           ← نموذج السيرفر + توليد WireGuard config
-│   └── firebase/FirebaseRepository.kt  ← قراءة/كتابة Firebase
+│   ├── model/Server.kt           ← نموذج السيرفر + import/export WireGuard config
+│   └── firebase/FirebaseRepository.kt  ← CRUD كامل (add/update/delete/usage)
 ├── vpn/
-│   └── VpnProService.kt          ← VPN Service الحقيقي (WireGuard GoBackend)
+│   └── VpnProService.kt          ← VPN Service (WireGuard GoBackend)
 ├── ui/
-│   ├── theme/                    ← ألوان وـ Theme داكن
-│   ├── viewmodel/MainViewModel.kt
+│   ├── theme/                    ← ألوان وـ Theme
+│   ├── viewmodel/MainViewModel.kt ← منطق كامل مع delete/edit/import
 │   ├── navigation/NavGraph.kt
 │   └── screens/
-│       ├── HomeScreen.kt         ← زر Connect الرئيسي
-│       ├── ServersScreen.kt      ← قائمة السيرفرات
-│       ├── AddServerScreen.kt    ← إضافة سيرفر جديد
-│       └── SettingsScreen.kt
+│       ├── HomeScreen.kt         ← زر Connect مع animation + error display
+│       ├── ServersScreen.kt      ← قائمة مع بحث + حذف + تعديل
+│       ├── AddServerScreen.kt    ← إضافة + استيراد config
+│       └── SettingsScreen.kt     ← Kill Switch + DNS + Auto-connect
 └── utils/
     ├── BootReceiver.kt
     └── FormatUtils.kt
@@ -158,31 +157,26 @@ app/src/main/kotlin/com/vpnpro/
 
 ---
 
-## 🔥 كيف تشتغل المشاركة؟
+## 🔥 كيف يعمل تجاوز القيود؟
 
 ```
-مستخدم يضيف سيرفر
-    ↓
-Firebase Realtime Database
-    ↓ (real-time)
-جميع المستخدمين يرون السيرفر فوراً
-    ↓
-يختار مستخدم السيرفر → يضغط Start
-    ↓
-WireGuard GoBackend يفتح النفق الحقيقي
-    ↓
-كل الترافيك يمر عبر السيرفر (مشفر)
+هاتفك → WireGuard VPN (تشفير ChaCha20) → سيرفرك → الإنترنت الكامل
+```
+
+بدل:
+```
+هاتفك → شبكة المشغل (مقيدة) → Facebook فقط (نص فقط)
+```
+
+بـ VPN:
+```
+هاتفك → WireGuard (مشفر) → سيرفر VPS → أي موقع + كل صور + كل فيديو
 ```
 
 ---
 
 ## ⚠️ ملاحظات
 
-1. **كل مستخدم يستخدم نفس client private key** المخزن في Firebase للسيرفر المختار.
-   للإنتاج الجاد: أنشئ مفتاح لكل مستخدم وسجّله كـ [Peer] منفصل على السيرفر.
-
-2. **Firebase Rules**: في الإنتاج، قيّد الكتابة بـ Auth للحماية من الـ spam.
-
-3. التطبيق يطلب **VPN Permission** عند أول اتصال — هذا سلوك إجباري من Android.
-
-4. اختبر على جهاز حقيقي، ليس Emulator (VPN لا يشتغل على معظم المحاكيات).
+1. التطبيق يطلب **VPN Permission** عند أول اتصال — هذا سلوك طبيعي من Android
+2. اختبر على جهاز حقيقي (VPN لا يشتغل على المحاكيات)
+3. **كل مستخدم يحتاج Client Private Key خاص به** — للإنتاج الجاد أنشئ مفتاح لكل مستخدم
