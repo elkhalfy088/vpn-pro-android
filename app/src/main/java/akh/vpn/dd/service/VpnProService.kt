@@ -6,20 +6,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
-import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import akh.vpn.dd.MainActivity
-import akh.vpn.dd.R
 import akh.vpn.dd.tunnel.SniTunnel
 import akh.vpn.dd.viewmodel.VpnStatus
 import kotlinx.coroutines.*
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.util.concurrent.atomic.AtomicLong
 
 class VpnProService : VpnService() {
 
@@ -105,66 +99,48 @@ class VpnProService : VpnService() {
                     }
                 )
 
-                // Wait for tunnel to open (max 15s)
-                var waited = 0
-                while (!tunnelReady && waited < 150) {
+                // Wait for tunnel to open (up to 10 seconds)
+                var waitedMs = 0
+                while (!tunnelReady && waitedMs < 10_000) {
                     delay(100)
-                    waited++
-                }
-                if (!tunnelReady) {
-                    throw Exception("Tunnel connection timed out")
+                    waitedMs += 100
                 }
 
-                // Read packets from TUN → forward to VPS via tunnel
+                if (!tunnelReady) {
+                    throw Exception("انتهت مهلة الاتصال بالسيرفر (10 ثوانٍ)")
+                }
+
+                // Forward packets: TUN interface → VPS tunnel
+                val buffer = ByteArray(1500)
                 val inputStream = FileInputStream(vpnInterface!!.fileDescriptor)
-                val buf = ByteArray(32_768)
-                while (currentStatus == VpnStatus.CONNECTED) {
-                    val n = inputStream.read(buf)
-                    if (n > 0) {
-                        val packet = buf.copyOf(n)
-                        bytesOut += n
-                        tunnel!!.sendData(packet)
+                Log.d(TAG, "Packet forwarding loop started")
+
+                while (currentStatus == VpnStatus.CONNECTED && tunnel?.isConnected() == true) {
+                    val len = inputStream.read(buffer)
+                    if (len > 0) {
+                        bytesOut += len
+                        tunnel?.sendData(buffer.copyOf(len))
                     }
                 }
 
+                Log.d(TAG, "Packet forwarding loop ended")
+
             } catch (e: Exception) {
-                Log.e(TAG, "VPN error: ${e.message}")
+                Log.e(TAG, "VPN error: ${e.message}", e)
                 currentStatus = VpnStatus.ERROR
-                updateNotification("خطأ في الاتصال")
+                updateNotification("خطأ: ${e.message?.take(50)}")
+                delay(2000)
                 stopVpn()
-            }
-        }
-
-        // Ping loop for latency stats
-        scope.launch {
-            while (currentStatus == VpnStatus.CONNECTED || currentStatus == VpnStatus.CONNECTING) {
-                delay(5000)
-                try {
-                    val start = System.currentTimeMillis()
-                    val reachable = InetAddress.getByName("1.1.1.1").isReachable(2000)
-                    if (reachable) latencyMs = System.currentTimeMillis() - start
-                } catch (_: Exception) {}
-            }
-        }
-
-        // Sync stats from tunnel
-        scope.launch {
-            while (currentStatus == VpnStatus.CONNECTED) {
-                delay(1000)
-                bytesIn  = SniTunnel.totalBytesIn.get()
-                bytesOut = SniTunnel.totalBytesOut.get()
-                latencyMs = SniTunnel.lastLatencyMs.get()
             }
         }
     }
 
     private fun stopVpn() {
-        scope.coroutineContext.cancelChildren()
+        currentStatus = VpnStatus.DISCONNECTED
         tunnel?.disconnect()
         tunnel = null
-        vpnInterface?.close()
+        try { vpnInterface?.close() } catch (_: Exception) {}
         vpnInterface = null
-        currentStatus = VpnStatus.DISCONNECTED
         bytesIn = 0; bytesOut = 0; latencyMs = 0
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

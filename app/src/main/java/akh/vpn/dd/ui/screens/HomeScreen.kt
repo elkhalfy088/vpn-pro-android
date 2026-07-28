@@ -41,7 +41,6 @@ fun HomeScreen(viewModel: VpnViewModel) {
         }
     }
 
-    // Check VPN permission before connecting
     fun connectWithPermission() {
         val intent = VpnService.prepare(context)
         if (intent != null) {
@@ -76,7 +75,9 @@ fun HomeScreen(viewModel: VpnViewModel) {
             )
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(32.dp))
@@ -100,192 +101,219 @@ fun HomeScreen(viewModel: VpnViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                // Status badge
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = when (uiState.status) {
                         VpnStatus.CONNECTED    -> Color(0xFF00E5B0).copy(alpha = 0.15f)
-                        VpnStatus.CONNECTING   -> Color(0xFFFFA000).copy(alpha = 0.15f)
+                        VpnStatus.CONNECTING   -> Color(0xFF4FC3F7).copy(alpha = 0.15f)
                         VpnStatus.ERROR        -> MaterialTheme.colorScheme.errorContainer
-                        else                   -> MaterialTheme.colorScheme.surfaceVariant
+                        VpnStatus.DISCONNECTED -> MaterialTheme.colorScheme.surfaceVariant
                     }
                 ) {
                     Text(
-                        when (uiState.status) {
-                            VpnStatus.CONNECTED  -> "متصل"
-                            VpnStatus.CONNECTING -> "جاري..."
-                            VpnStatus.ERROR      -> "خطأ"
-                            else                 -> "غير متصل"
+                        text = when (uiState.status) {
+                            VpnStatus.CONNECTED    -> "متصل"
+                            VpnStatus.CONNECTING   -> "جاري الاتصال…"
+                            VpnStatus.ERROR        -> "خطأ"
+                            VpnStatus.DISCONNECTED -> "غير متصل"
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = when (uiState.status) {
-                            VpnStatus.CONNECTED  -> Color(0xFF00E5B0)
-                            VpnStatus.CONNECTING -> Color(0xFFFFA000)
-                            VpnStatus.ERROR      -> MaterialTheme.colorScheme.error
-                            else                 -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold,
+                        color = when (uiState.status) {
+                            VpnStatus.CONNECTED    -> Color(0xFF00E5B0)
+                            VpnStatus.CONNECTING   -> Color(0xFF4FC3F7)
+                            VpnStatus.ERROR        -> MaterialTheme.colorScheme.error
+                            VpnStatus.DISCONNECTED -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             }
 
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.weight(1f))
 
-            // Server info card
-            uiState.config?.let { config ->
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Dns, null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                config.serverHost,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                "منفذ: ${config.serverPort}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Shield, null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    config.decoyDomain.take(12),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(48.dp))
-
-            // Main Connect Button
+            // Connect button with pulse ring
             Box(contentAlignment = Alignment.Center) {
-                // Outer glow ring (animated when connecting)
-                if (uiState.status == VpnStatus.CONNECTING) {
-                    Surface(
-                        shape = CircleShape,
+                // Outer pulse ring (disconnected state)
+                if (!isConnected && uiState.status != VpnStatus.CONNECTING) {
+                    Box(
                         modifier = Modifier
-                            .size(160.dp)
-                            .scale(pulseScale),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                    ) {}
+                            .size(170.dp)
+                            .scale(pulseScale)
+                            .background(
+                                Color(0xFF00E5B0).copy(alpha = 0.07f),
+                                CircleShape
+                            )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(148.dp)
+                            .background(
+                                Color(0xFF00E5B0).copy(alpha = 0.05f),
+                                CircleShape
+                            )
+                    )
                 }
 
-                // Button
-                val buttonColor = when (uiState.status) {
-                    VpnStatus.CONNECTED  -> Color(0xFF00E5B0)
-                    VpnStatus.CONNECTING -> Color(0xFFFFA000)
-                    VpnStatus.ERROR      -> MaterialTheme.colorScheme.error
-                    else                 -> MaterialTheme.colorScheme.primary
-                }
-
+                // Main button
                 Surface(
-                    onClick = {
-                        if (uiState.status == VpnStatus.DISCONNECTED || uiState.status == VpnStatus.ERROR) {
-                            connectWithPermission()
-                        } else {
-                            viewModel.disconnectVpn()
-                        }
-                    },
                     shape = CircleShape,
-                    color = buttonColor,
-                    modifier = Modifier.size(140.dp),
-                    shadowElevation = if (isConnected) 12.dp else 4.dp
+                    color = when (uiState.status) {
+                        VpnStatus.CONNECTED  -> Color(0xFF00E5B0)
+                        VpnStatus.ERROR      -> MaterialTheme.colorScheme.errorContainer
+                        else                 -> MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier
+                        .size(130.dp)
+                        .clickable(enabled = uiState.status != VpnStatus.CONNECTING) {
+                            when (uiState.status) {
+                                VpnStatus.CONNECTED    -> viewModel.disconnectVpn()
+                                VpnStatus.ERROR,
+                                VpnStatus.DISCONNECTED -> connectWithPermission()
+                                else -> Unit
+                            }
+                        },
+                    shadowElevation = if (isConnected) 14.dp else 4.dp
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                if (isConnected) Icons.Default.PowerSettingsNew else Icons.Default.Power,
-                                null,
-                                tint = if (isConnected) Color(0xFF003328) else MaterialTheme.colorScheme.onPrimary,
+                                imageVector = if (isConnected) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = null,
+                                tint = when (uiState.status) {
+                                    VpnStatus.CONNECTED -> Color(0xFF003328)
+                                    VpnStatus.ERROR     -> MaterialTheme.colorScheme.error
+                                    else                -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 modifier = Modifier.size(40.dp)
                             )
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                when (uiState.status) {
-                                    VpnStatus.CONNECTED  -> "قطع"
+                                text = when (uiState.status) {
+                                    VpnStatus.CONNECTED  -> "إيقاف"
                                     VpnStatus.CONNECTING -> "..."
+                                    VpnStatus.ERROR      -> "إعادة"
                                     else                 -> "اتصال"
                                 },
-                                color = if (isConnected) Color(0xFF003328) else MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                                color = when (uiState.status) {
+                                    VpnStatus.CONNECTED -> Color(0xFF003328)
+                                    VpnStatus.ERROR     -> MaterialTheme.colorScheme.error
+                                    else                -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
                 }
+
+                // Connecting progress ring
+                if (uiState.status == VpnStatus.CONNECTING) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(152.dp),
+                        color = Color(0xFF4FC3F7),
+                        strokeWidth = 3.dp,
+                        strokeCap = StrokeCap.Round
+                    )
+                }
+
+                // Connected glow ring
+                if (isConnected) {
+                    Box(
+                        modifier = Modifier
+                            .size(148.dp)
+                            .border(2.dp, Color(0xFF00E5B0).copy(alpha = 0.5f), CircleShape)
+                    )
+                }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(36.dp))
 
-            // Timer
-            if (uiState.connectedSeconds > 0) {
-                Text(
-                    formatTime(uiState.connectedSeconds),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF00E5B0),
-                    fontWeight = FontWeight.Medium
-                )
+            // Server info card
+            uiState.config?.let { config ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Dns,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "${config.serverHost}:${config.serverPort}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "SNI: ${config.decoyDomain}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = if (isConnected) Color(0xFF00E5B0) else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(16.dp))
 
-            // Stats row
+            // Stats (visible when connected)
             AnimatedVisibility(
                 visible = isConnected,
                 enter = fadeIn() + expandVertically(),
-                exit  = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically()
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    StatCard("↑", formatBytes(uiState.bytesOut), "رفع")
-                    StatCard("↓", formatBytes(uiState.bytesIn), "تنزيل")
-                    StatCard("🏓", "${uiState.latencyMs}ms", "البينغ")
+                    StatCard("↓", formatBytes(uiState.bytesIn), "استقبال")
+                    StatCard("↑", formatBytes(uiState.bytesOut), "إرسال")
+                    StatCard("⏱", formatTime(uiState.connectedSeconds), "الوقت")
                 }
             }
 
-            // Error message
-            AnimatedVisibility(visible = uiState.errorMessage != null) {
+            Spacer(Modifier.weight(1f))
+
+            // Error banner
+            AnimatedVisibility(
+                visible = uiState.errorMessage != null,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it }
+            ) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Warning, null,
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp))
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             uiState.errorMessage ?: "",
@@ -293,8 +321,15 @@ fun HomeScreen(viewModel: VpnViewModel) {
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = viewModel::clearError, modifier = Modifier.size(20.dp)) {
-                            Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp))
+                        IconButton(
+                            onClick = viewModel::clearError,
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
                         }
                     }
                 }
@@ -316,10 +351,17 @@ private fun StatCard(icon: String, value: String, label: String) {
         ) {
             Text(icon, fontSize = 18.sp)
             Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface)
-            Text(label, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
