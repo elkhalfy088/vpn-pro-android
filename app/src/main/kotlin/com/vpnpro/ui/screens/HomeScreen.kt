@@ -247,7 +247,7 @@ fun HomeScreen(
                             )
                         }
                     } else {
-                        Icon(Icons.Default.DnsOutlined, null, tint = OnSurfaceVariant, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Outlined.Dns, null, tint = OnSurfaceVariant, modifier = Modifier.size(28.dp))
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Select a Server", fontWeight = FontWeight.SemiBold, color = OnSurface)
