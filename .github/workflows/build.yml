@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: wireguard-tunnel.aar
-          key: wireguard-tunnel-latest-ndk28-v1
+          key: wireguard-tunnel-latest-ndk28-submodules-v1
 
       - name: Clone and build WireGuard tunnel
         if: steps.wg-cache.outputs.cache-hit != 'true'
@@ -50,7 +50,8 @@ jobs:
             | sort -V | tail -1)
           echo "Using WireGuard Android tag: $TAG"
 
-          git clone --depth 1 --branch "$TAG" \
+          # Clone WITH submodules (wireguard-go is required for native sources)
+          git clone --depth 1 --branch "$TAG" --recurse-submodules \
             https://github.com/WireGuard/wireguard-android.git /tmp/wg-android
 
           cd /tmp/wg-android
