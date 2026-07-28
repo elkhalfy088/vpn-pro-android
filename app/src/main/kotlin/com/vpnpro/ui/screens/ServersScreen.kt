@@ -1,25 +1,25 @@
 package com.vpnpro.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vpnpro.data.model.Server
+import com.vpnpro.data.model.ServerProtocol
 import com.vpnpro.ui.theme.*
 import com.vpnpro.ui.viewmodel.MainViewModel
 import com.vpnpro.vpn.VpnState
@@ -34,15 +34,88 @@ fun ServersScreen(
     val servers        by vm.servers.collectAsState()
     val selectedServer by vm.selectedServer.collectAsState()
     val vpnState       by vm.vpnState.collectAsState()
+    val connectedName  by vm.connectedServerName.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
+    var serverToDelete by remember { mutableStateOf<Server?>(null) }
+    var serverToEdit   by remember { mutableStateOf<Server?>(null) }
 
-    val filteredServers = remember(servers, searchQuery) {
-        if (searchQuery.isBlank()) servers
-        else servers.filter {
-            it.name.contains(searchQuery, ignoreCase = true) ||
-            it.location.contains(searchQuery, ignoreCase = true)
-        }
+    // Filter
+    val filtered = servers.filter {
+        searchQuery.isBlank() ||
+        it.name.contains(searchQuery, ignoreCase = true) ||
+        it.location.contains(searchQuery, ignoreCase = true)
+    }
+
+    // Delete confirmation
+    serverToDelete?.let { toDelete ->
+        AlertDialog(
+            onDismissRequest = { serverToDelete = null },
+            icon  = { Icon(Icons.Default.DeleteForever, null, tint = AccentRed) },
+            title = { Text("حذف السيرفر") },
+            text  = { Text("هل تريد حذف \"${toDelete.name}\"؟ لا يمكن التراجع.", color = OnSurfaceVariant) },
+            confirmButton = {
+                Button(
+                    onClick = { vm.deleteServer(toDelete.id); serverToDelete = null },
+                    colors  = ButtonDefaults.buttonColors(containerColor = AccentRed)
+                ) { Text("حذف") }
+            },
+            dismissButton = {
+                TextButton(onClick = { serverToDelete = null }) { Text("إلغاء", color = OnSurfaceVariant) }
+            },
+            containerColor = Surface1
+        )
+    }
+
+    // Edit dialog (basic name/location edit)
+    serverToEdit?.let { editing ->
+        var editName     by remember { mutableStateOf(editing.name) }
+        var editLocation by remember { mutableStateOf(editing.location) }
+        AlertDialog(
+            onDismissRequest = { serverToEdit = null },
+            icon  = { Icon(Icons.Default.Edit, null, tint = AccentCyan) },
+            title = { Text("تعديل السيرفر") },
+            text  = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = editName, onValueChange = { editName = it },
+                        label = { Text("الاسم") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentCyan, unfocusedBorderColor = Surface3,
+                            focusedTextColor = OnSurface, unfocusedTextColor = OnSurface,
+                            focusedContainerColor = Surface1, unfocusedContainerColor = Surface1,
+                            focusedLabelColor = AccentCyan
+                        )
+                    )
+                    OutlinedTextField(
+                        value = editLocation, onValueChange = { editLocation = it },
+                        label = { Text("الموقع") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentCyan, unfocusedBorderColor = Surface3,
+                            focusedTextColor = OnSurface, unfocusedTextColor = OnSurface,
+                            focusedContainerColor = Surface1, unfocusedContainerColor = Surface1,
+                            focusedLabelColor = AccentCyan
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.updateServer(editing.copy(name = editName.trim(), location = editLocation.trim()))
+                        serverToEdit = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                    enabled = editName.isNotBlank()
+                ) { Text("حفظ") }
+            },
+            dismissButton = {
+                TextButton(onClick = { serverToEdit = null }) { Text("إلغاء", color = OnSurfaceVariant) }
+            },
+            containerColor = Surface1
+        )
     }
 
     Box(
@@ -51,8 +124,7 @@ fun ServersScreen(
             .background(Brush.verticalGradient(listOf(BgDark, BgMid)))
     ) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
-
-            // ── Top bar ───────────────────────────────────────
+            // ── Top bar ───────────────────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -61,107 +133,86 @@ fun ServersScreen(
                     Icon(Icons.Default.ArrowBack, null, tint = OnSurface)
                 }
                 Text(
-                    "Servers",
+                    "السيرفرات",
                     fontWeight = FontWeight.Bold, fontSize = 20.sp, color = OnSurface,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
-                FilledTonalButton(
-                    onClick = onAddServer,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = AccentCyan.copy(alpha = 0.15f),
-                        contentColor   = AccentCyan
-                    )
-                ) {
-                    Icon(Icons.Default.Add, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Add")
+                IconButton(onClick = onAddServer) {
+                    Icon(Icons.Default.Add, null, tint = AccentCyan)
                 }
-                Spacer(Modifier.width(8.dp))
             }
+            Divider(color = Surface3, thickness = 0.5.dp)
 
-            // ── Search bar ────────────────────────────────────
+            // ── Search ─────────────────────────────────────────────────────
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search servers...", color = OnSurfaceMuted, fontSize = 14.sp) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = OnSurfaceMuted)
-                },
-                trailingIcon = if (searchQuery.isNotBlank()) {
-                    {
+                placeholder = { Text("البحث بالاسم أو الموقع…", color = OnSurfaceMuted, fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, null, Modifier.size(18.dp), tint = OnSurfaceMuted)
+                            Icon(Icons.Default.Clear, null, tint = OnSurfaceVariant)
                         }
                     }
-                } else null,
+                },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor   = Surface1,
-                    unfocusedContainerColor = Surface1,
-                    focusedBorderColor      = AccentCyan,
-                    unfocusedBorderColor    = Surface3,
-                    focusedTextColor        = OnSurface,
-                    unfocusedTextColor      = OnSurface
+                    focusedBorderColor = AccentCyan,
+                    unfocusedBorderColor = Surface3,
+                    focusedTextColor = OnSurface,
+                    unfocusedTextColor = OnSurface,
+                    focusedContainerColor = Surface1,
+                    unfocusedContainerColor = Surface1
                 ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = MaterialTheme.shapes.medium
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            Divider(color = Surface3, thickness = 0.5.dp)
-
-            if (filteredServers.isNotEmpty()) {
-                Text(
-                    "${filteredServers.size} server${if (filteredServers.size == 1) "" else "s"}",
-                    color = OnSurfaceMuted, fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                )
-            }
-
-            // ── Empty state ───────────────────────────────────
-            if (filteredServers.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Outlined.Dns, null, Modifier.size(64.dp), tint = OnSurfaceMuted)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            if (searchQuery.isBlank()) "No servers yet" else "No results found",
-                            fontSize = 18.sp, color = OnSurfaceVariant, fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            if (searchQuery.isBlank()) "Tap 'Add' to add your first server"
-                            else "Try a different search term",
-                            fontSize = 14.sp, color = OnSurfaceMuted
-                        )
-                        if (searchQuery.isBlank()) {
-                            Spacer(Modifier.height(24.dp))
+            // ── List ─────────────────────────────────────────────────────
+            when {
+                filtered.isEmpty() && servers.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Dns, null, Modifier.size(48.dp), tint = OnSurfaceMuted)
+                            Spacer(Modifier.height(12.dp))
+                            Text("لا يوجد سيرفرات بعد", color = OnSurfaceVariant, fontSize = 16.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Text("اضغط + لإضافة سيرفر WireGuard أو V2Ray", color = OnSurfaceMuted, fontSize = 13.sp)
+                            Spacer(Modifier.height(16.dp))
                             Button(
                                 onClick = onAddServer,
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
                             ) {
-                                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+                                Icon(Icons.Default.Add, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Add Server")
+                                Text("إضافة سيرفر")
                             }
                         }
                     }
                 }
-            } else {
-                // ── Server list ───────────────────────────────
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(filteredServers, key = { it.id }) { server ->
-                        ServerCard(
-                            server     = server,
-                            isSelected = selectedServer?.id == server.id,
-                            isConnected = vpnState == VpnState.CONNECTED &&
-                                          selectedServer?.id == server.id,
-                            onSelect   = { vm.selectServer(server) }
-                        )
+                filtered.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("لا نتائج لـ \"$searchQuery\"", color = OnSurfaceVariant)
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(filtered, key = { it.id }) { server ->
+                            val isSelected  = selectedServer?.id == server.id
+                            val isConnected = isSelected && vpnState == VpnState.CONNECTED
+                            ServerCard(
+                                server     = server,
+                                isSelected = isSelected,
+                                isConnected= isConnected,
+                                onSelect   = { vm.selectServer(server) },
+                                onEdit     = { serverToEdit = server },
+                                onDelete   = { serverToDelete = server }
+                            )
+                        }
+                        item { Spacer(Modifier.height(16.dp)) }
                     }
                 }
             }
@@ -169,51 +220,52 @@ fun ServersScreen(
     }
 }
 
+// ── Server card ───────────────────────────────────────────────────────────────
+
 @Composable
 private fun ServerCard(
     server: Server,
     isSelected: Boolean,
     isConnected: Boolean,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    val isXray = server.serverProtocol == ServerProtocol.XRAY
+    val protoLabel = if (isXray) "V2Ray/Xray" else "WireGuard"
+    val protoColor = if (isXray) AccentGreen else AccentCyan
+
     Card(
-        shape  = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = if (isSelected) Surface3 else Surface2),
+        shape  = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) Surface2 else Surface1
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (isSelected)
-                    Modifier.border(1.5.dp, AccentCyan.copy(alpha = 0.6f), MaterialTheme.shapes.large)
-                else Modifier
-            )
+            .padding(horizontal = 16.dp, vertical = 4.dp)
             .clickable(onClick = onSelect)
     ) {
         Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Flag + online dot
-            Box(contentAlignment = Alignment.BottomEnd) {
-                Text(server.flag, fontSize = 36.sp)
-                if (isConnected) {
-                    Box(
-                        Modifier
-                            .size(11.dp)
-                            .background(AccentGreen, CircleShape)
-                            .border(2.dp, Surface2, CircleShape)
-                    )
-                }
-            }
+            // Flag
+            Text(server.flag.ifBlank { "🌐" }, fontSize = 26.sp)
+            Spacer(Modifier.width(12.dp))
 
-            Spacer(Modifier.width(14.dp))
-
+            // Info
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         server.name,
-                        fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = OnSurface,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        fontWeight = FontWeight.SemiBold,
+                        color = OnSurface,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (server.isPremium) {
                         Spacer(Modifier.width(6.dp))
@@ -221,16 +273,14 @@ private fun ServerCard(
                             color = AccentOrange.copy(alpha = 0.15f),
                             shape = MaterialTheme.shapes.small
                         ) {
-                            Text(
-                                "  PRO  ", fontSize = 10.sp, color = AccentOrange,
+                            Text("  PRO  ", fontSize = 10.sp, color = AccentOrange,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            )
+                                modifier = Modifier.padding(vertical = 2.dp))
                         }
                     }
                 }
                 Text(
-                    server.location.ifBlank { server.endpoint },
+                    server.location.ifBlank { server.endpoint.ifBlank { "V2Ray Server" } },
                     fontSize = 12.sp, color = OnSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
@@ -239,8 +289,8 @@ private fun ServerCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Surface(color = AccentCyan.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small) {
-                        Text("  WireGuard  ", fontSize = 10.sp, color = AccentCyan,
+                    Surface(color = protoColor.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small) {
+                        Text("  $protoLabel  ", fontSize = 10.sp, color = protoColor,
                             modifier = Modifier.padding(vertical = 2.dp))
                     }
                     if (server.usageCount > 0) {
@@ -253,6 +303,7 @@ private fun ServerCard(
                 }
             }
 
+            // Selected / Connected indicator
             if (isSelected) {
                 Spacer(Modifier.width(8.dp))
                 Icon(
@@ -261,6 +312,29 @@ private fun ServerCard(
                     tint = if (isConnected) AccentGreen else AccentCyan,
                     modifier = Modifier.size(22.dp)
                 )
+            }
+
+            // More menu
+            Box {
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.MoreVert, null, Modifier.size(18.dp), tint = OnSurfaceVariant)
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(Surface2)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("تعديل", color = OnSurface, fontSize = 14.sp) },
+                        leadingIcon = { Icon(Icons.Default.Edit, null, tint = AccentCyan) },
+                        onClick = { showMenu = false; onEdit() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("حذف", color = AccentRed, fontSize = 14.sp) },
+                        leadingIcon = { Icon(Icons.Default.DeleteForever, null, tint = AccentRed) },
+                        onClick = { showMenu = false; onDelete() }
+                    )
+                }
             }
         }
     }

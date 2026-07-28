@@ -14,8 +14,8 @@ android {
         applicationId "com.vpnpro"
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 3
+        versionName "3.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -45,8 +45,11 @@ android {
     packaging {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += 'META-INF/INDEX.LIST'
+            excludes += 'META-INF/DEPENDENCIES'
         }
         jniLibs {
+            // Keep all native .so files from libv2ray and wireguard
             keepDebugSymbols += ['**/*.so']
         }
     }
@@ -82,7 +85,10 @@ dependencies {
     // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
 
-    // WireGuard Tunnel — built from source in CI, included as local AAR
+    // JSON parsing (for V2Ray config)
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Local AARs: WireGuard tunnel + libv2ray (Xray-core)
     implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
 
     // Coroutines

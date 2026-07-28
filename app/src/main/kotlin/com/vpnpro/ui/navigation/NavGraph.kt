@@ -9,10 +9,11 @@ import com.vpnpro.ui.screens.*
 import com.vpnpro.ui.viewmodel.MainViewModel
 
 object Routes {
-    const val HOME       = "home"
-    const val SERVERS    = "servers"
-    const val ADD_SERVER = "add_server"
-    const val SETTINGS   = "settings"
+    const val HOME         = "home"
+    const val SERVERS      = "servers"
+    const val ADD_SERVER   = "add_server"
+    const val FREE_SERVERS = "free_servers"
+    const val SETTINGS     = "settings"
 }
 
 @Composable
@@ -25,7 +26,8 @@ fun NavGraph() {
             HomeScreen(
                 vm             = vm,
                 onOpenServers  = { navController.navigate(Routes.SERVERS) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) }
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenFree     = { navController.navigate(Routes.FREE_SERVERS) }
             )
         }
         composable(Routes.SERVERS) {
@@ -37,6 +39,12 @@ fun NavGraph() {
         }
         composable(Routes.ADD_SERVER) {
             AddServerScreen(
+                vm     = vm,
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Routes.FREE_SERVERS) {
+            FreeServersScreen(
                 vm     = vm,
                 onBack = { navController.popBackStack() }
             )

@@ -1,132 +1,70 @@
-# VPN Pro — Android App v2.0
+# VPN Pro v3.0 — WireGuard + V2Ray/Xray 🇲🇦
 
-تطبيق VPN حقيقي يعمل بـ WireGuard + Firebase للمشاركة الفورية للسيرفرات بين جميع المستخدمين.
-يمرّر **جميع ترافيك الإنترنت** (صور، فيديو، أي موقع أو تطبيق) عبر السيرفر.
+تطبيق VPN متكامل يدعم **WireGuard** و**V2Ray/Xray** (VMess/VLESS/Trojan) مع جلب تلقائي للسيرفرات المجانية.
 
 ---
 
-## 🆕 الجديد في v2.0
+## 🆕 الجديد في v3.0
 
 | الميزة | الوصف |
 |--------|-------|
-| 🗑️ **حذف السيرفرات** | احذف أي سيرفر بضغطة واحدة مع تأكيد |
-| ✏️ **تعديل السيرفرات** | عدّل الاسم والموقع والبيانات الأساسية |
-| 📋 **استيراد Config** | الصق إعدادات WireGuard مباشرة من النص أو الحافظة |
-| 🔍 **بحث في السيرفرات** | ابحث عن سيرفر بالاسم أو الموقع |
-| 🛡️ **Kill Switch** | يقطع الإنترنت تلقائياً إذا انقطع VPN |
-| 👥 **عداد الاستخدام** | يظهر كم مستخدم اتصل بكل سيرفر |
-| 🌐 **DNS متعدد** | اختر: Cloudflare / Google / Quad9 / AdGuard |
-| 🎨 **واجهة محسّنة** | تصميم جديد مع تحريكات وألوان أفضل |
-| ⚠️ **رسائل خطأ واضحة** | تظهر سبب فشل الاتصال بوضوح |
-| ⚙️ **MTU قابل للتخصيص** | لحل مشاكل الاتصال على بعض الشبكات |
+| 🆓 **سيرفرات مجانية** | جلب تلقائي من barry-far، mahdibland، freefq |
+| 🔗 **V2Ray/Xray** | دعم VMess / VLESS / Trojan كامل |
+| 🇲🇦 **Bug Hosts مغربية** | قائمة Bug Hosts لـ Inwi، IAM، Orange |
+| 📋 **لصق رابط** | الصق vmess:// أو vless:// أو trojan:// مباشرة |
+| 📡 **WireGuard محافظ** | كل ميزات WireGuard v2.0 لا تزال موجودة |
 
 ---
 
-## 🛠️ المتطلبات
+## 📱 الاستخدام للإنترنت المجاني (بدون دفع — 0 درهم)
 
-- Android Studio Hedgehog (2023.1.1) أو أحدث
-- JDK 17
-- Android SDK 34
-- حساب Firebase
+### الطريقة الأسرع:
 
----
+1. ثبّت التطبيق
+2. افتح **"سيرفرات مجانية"** (الزر الأخضر في الصفحة الرئيسية)
+3. اضغط 🔄 Refresh لجلب أحدث السيرفرات
+4. اضغط **Connect** على أي سيرفر
+5. اقبل إذن VPN
+6. إذا لم يشتغل السيرفر الأول، جرّب سيرفراً آخر
 
-## ⚡ خطوات الإعداد السريع
-
-### الخطوة 1 — إنشاء مشروع Firebase
-
-1. افتح [Firebase Console](https://console.firebase.google.com)
-2. أنشئ مشروعاً جديداً (مثلاً `vpn-pro`)
-3. اذهب إلى **Project Settings → General → Your apps**
-4. اضغط **Add app → Android**
-5. أدخل `com.vpnpro` كـ Package name
-6. حمّل ملف `google-services.json`
-7. **ضعه في مجلد `app/`** (استبدل الملف القالب الموجود)
-
-### الخطوة 2 — إعداد Firebase Realtime Database
-
-1. في Firebase Console → **Build → Realtime Database → Create database**
-2. اختر منطقة قريبة → ابدأ بـ **Test mode**
-3. اذهب إلى **Rules** والصق محتوى `firebase-rules.json` ثم اضغط **Publish**
-
-### الخطوة 3 — بناء التطبيق
-
-```bash
-# افتح Android Studio → Open → اختر هذا المجلد
-# انتظر Gradle sync (~2 دقائق)
-
-# APK الناتج:
-# app/build/outputs/apk/debug/app-debug.apk
-```
+> **ملاحظة:** السيرفرات المجانية تتغير يومياً. اضغط Refresh لتحديثها.
 
 ---
 
-## 🌐 إعداد سيرفر WireGuard (مطلوب لتجاوز القيود)
+## 🛠️ البناء (GitHub Actions — تلقائي)
 
-لكي يشتغل الاتصال الحقيقي ويمر **كل الترافيك** (صور + فيديو + أي موقع)، تحتاج سيرفر VPS:
+عند كل push على `main`، يُبنى APK تلقائياً ويُنشر في Releases.
 
-```bash
-# تثبيت WireGuard (Ubuntu/Debian)
-sudo apt update && sudo apt install -y wireguard
-
-# توليد مفاتيح السيرفر
-wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
-
-# إنشاء config السيرفر
-sudo nano /etc/wireguard/wg0.conf
-```
-
-محتوى `/etc/wireguard/wg0.conf`:
-```ini
-[Interface]
-Address = 10.0.0.1/24
-ListenPort = 51820
-PrivateKey = <SERVER_PRIVATE_KEY>
-PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-
-[Peer]
-PublicKey = <CLIENT_PUBLIC_KEY>
-AllowedIPs = 10.0.0.2/32
-```
-
-```bash
-# تفعيل IP Forwarding
-echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
-
-# تشغيل WireGuard
-sudo systemctl enable --now wg-quick@wg0
-```
+يمكنك تشغيل البناء يدوياً من: **Actions → Build APK → Run workflow**
 
 ---
 
-## 📱 إضافة سيرفر من داخل التطبيق
+## 🇲🇦 Bug Hosts للشرائح المغربية
 
-**طريقة 1 — يدوي (Servers → Add):**
+| الشريحة | Bug Host | Port | TLS |
+|---------|----------|------|-----|
+| Inwi | graph.facebook.com | 443 | ✅ |
+| Inwi | web.facebook.com | 80 | ❌ |
+| Maroc Telecom (IAM) | graph.facebook.com | 443 | ✅ |
+| Maroc Telecom (IAM) | free.facebook.com | 443 | ✅ |
+| Orange Maroc | graph.facebook.com | 443 | ✅ |
+| Orange Maroc | web.facebook.com | 443 | ✅ |
+| الكل | zero.facebook.com | 443 | ✅ |
+| الكل | internet.org | 443 | ✅ |
 
-| الحقل | القيمة |
-|-------|--------|
-| Server Name | اسم تعريفي مثل Germany-01 |
-| Flag Emoji | 🇩🇪 |
-| Location | Frankfurt |
-| Endpoint | `YOUR_VPS_IP:51820` |
-| Server Public Key | محتوى `server_public.key` |
-| Client Private Key | محتوى `client.key` |
-| Client Address | `10.0.0.2/32` |
-| DNS | `1.1.1.1, 1.0.0.1` |
-| Allowed IPs | `0.0.0.0/0, ::/0` ← **مهم: لتمرير كل الترافيك** |
-
-**طريقة 2 — استيراد Config (Servers → Add → Import):**
-- الصق محتوى ملف `.conf` مباشرة في حقل الاستيراد
+> **كيف تستخدم Bug Host:** تحتاج سيرفر VPS خاص مع V2Ray مُعَدّ بـ WebSocket. ضع Host Header = Bug Host.
 
 ---
 
-## ⚙️ إعدادات مهمة
+## 🔗 مصادر السيرفرات المجانية
 
-- **Allowed IPs = `0.0.0.0/0, ::/0`** → يمرّر كل الترافيك (صور + فيديو + كل موقع)
-- **Kill Switch** → يقطع الإنترنت إذا انقطع VPN (يمنع تسريب IP)
-- **DNS** → اختر Cloudflare (1.1.1.1) أو Quad9 (9.9.9.9) لأسرع DNS وأكثر أمناً
+| المصدر | الرابط |
+|--------|--------|
+| barry-far | https://github.com/barry-far/V2ray-Configs |
+| mahdibland | https://github.com/mahdibland/V2RayAggregator |
+| freefq | https://freefq.com/v2ray/ |
+| yebekhe | https://github.com/yebekhe/TelegramV2rayCollector |
+| تيليجرام | @v2rayng_config |
 
 ---
 
@@ -134,49 +72,31 @@ sudo systemctl enable --now wg-quick@wg0
 
 ```
 app/src/main/kotlin/com/vpnpro/
-├── VpnProApp.kt
-├── MainActivity.kt
 ├── data/
-│   ├── model/Server.kt           ← نموذج السيرفر + import/export WireGuard config
-│   └── firebase/FirebaseRepository.kt  ← CRUD كامل (add/update/delete/usage)
+│   ├── model/Server.kt           ← نموذج يدعم WireGuard + V2Ray
+│   └── firebase/FirebaseRepository.kt
 ├── vpn/
-│   └── VpnProService.kt          ← VPN Service (WireGuard GoBackend)
+│   ├── VpnProService.kt          ← خدمة WireGuard
+│   ├── XrayVpnService.kt         ← خدمة V2Ray/Xray ← جديد
+│   ├── XrayController.kt         ← تحكم Xray core ← جديد
+│   ├── ConfigParser.kt           ← تحليل VMess/VLESS/Trojan ← جديد
+│   └── FreeConfigFetcher.kt      ← جلب سيرفرات مجانية ← جديد
 ├── ui/
-│   ├── theme/                    ← ألوان وـ Theme
-│   ├── viewmodel/MainViewModel.kt ← منطق كامل مع delete/edit/import
-│   ├── navigation/NavGraph.kt
+│   ├── viewmodel/MainViewModel.kt ← يدعم كلا البروتوكولين
 │   └── screens/
-│       ├── HomeScreen.kt         ← زر Connect مع animation + error display
-│       ├── ServersScreen.kt      ← قائمة مع بحث + حذف + تعديل
-│       ├── AddServerScreen.kt    ← إضافة + استيراد config
-│       └── SettingsScreen.kt     ← Kill Switch + DNS + Auto-connect
+│       ├── HomeScreen.kt
+│       ├── ServersScreen.kt
+│       ├── AddServerScreen.kt    ← تبويب WireGuard + تبويب V2Ray
+│       ├── FreeServersScreen.kt  ← سيرفرات مجانية + Bug Hosts ← جديد
+│       └── SettingsScreen.kt
 └── utils/
-    ├── BootReceiver.kt
-    └── FormatUtils.kt
 ```
 
 ---
 
-## 🔥 كيف يعمل تجاوز القيود؟
+## ⚙️ المتطلبات للبناء المحلي
 
-```
-هاتفك → WireGuard VPN (تشفير ChaCha20) → سيرفرك → الإنترنت الكامل
-```
-
-بدل:
-```
-هاتفك → شبكة المشغل (مقيدة) → Facebook فقط (نص فقط)
-```
-
-بـ VPN:
-```
-هاتفك → WireGuard (مشفر) → سيرفر VPS → أي موقع + كل صور + كل فيديو
-```
-
----
-
-## ⚠️ ملاحظات
-
-1. التطبيق يطلب **VPN Permission** عند أول اتصال — هذا سلوك طبيعي من Android
-2. اختبر على جهاز حقيقي (VPN لا يشتغل على المحاكيات)
-3. **كل مستخدم يحتاج Client Private Key خاص به** — للإنتاج الجاد أنشئ مفتاح لكل مستخدم
+- Android Studio Hedgehog أو أحدث
+- JDK 17
+- Android SDK 36
+- حساب Firebase (اختياري — للمشاركة المركزية للسيرفرات)

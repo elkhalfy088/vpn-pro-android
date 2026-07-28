@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
@@ -35,14 +35,15 @@ jobs:
             "ndk;28.2.13676358" 2>&1 | grep -E "^(Installed|Error)" || true
           echo "NDK_DIR=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
 
+      # ── WireGuard AAR ─────────────────────────────────────────────────────
       - name: Cache WireGuard tunnel AAR
         id: wg-cache
         uses: actions/cache@v4
         with:
           path: wireguard-tunnel.aar
-          key: wireguard-tunnel-latest-ndk28-submodules-v1
+          key: wireguard-tunnel-latest-ndk28-v2
 
-      - name: Clone and build WireGuard tunnel
+      - name: Build WireGuard tunnel AAR
         if: steps.wg-cache.outputs.cache-hit != 'true'
         run: |
           TAG=$(git ls-remote --tags https://github.com/WireGuard/wireguard-android.git \
@@ -51,23 +52,49 @@ jobs:
             | grep '^[0-9]' \
             | sort -V | tail -1)
           echo "Using WireGuard Android tag: $TAG"
-
           git clone --depth 1 --branch "$TAG" --recurse-submodules \
             https://github.com/WireGuard/wireguard-android.git /tmp/wg-android
-
           cd /tmp/wg-android
           printf "sdk.dir=%s\nndk.dir=%s\n" \
             "$ANDROID_HOME" "$ANDROID_HOME/ndk/28.2.13676358" > local.properties
           chmod +x gradlew
           ./gradlew :tunnel:assembleRelease --no-daemon -q
           AAR=$(find tunnel/build/outputs/aar -name "*.aar" | head -1)
-          echo "Built AAR: $AAR ($(du -sh $AAR | cut -f1))"
+          echo "Built WireGuard AAR: $AAR"
           cp "$AAR" "$GITHUB_WORKSPACE/wireguard-tunnel.aar"
 
-      - name: Copy WireGuard AAR to libs
+      # ── AndroidLibXrayLite (Xray-core for Android) ────────────────────────
+      - name: Cache libv2ray AAR
+        id: xray-cache
+        uses: actions/cache@v4
+        with:
+          path: libv2ray.aar
+          key: libv2ray-xray-26-v3
+
+      - name: Download libv2ray AAR (AndroidLibXrayLite)
+        if: steps.xray-cache.outputs.cache-hit != 'true'
+        run: |
+          # Get latest release of AndroidLibXrayLite
+          XRAY_URL=$(curl -s https://api.github.com/repos/2dust/AndroidLibXrayLite/releases/latest \
+            | grep "browser_download_url" \
+            | grep "libv2ray.aar" \
+            | cut -d '"' -f 4 \
+            | head -1)
+
+          if [ -z "$XRAY_URL" ]; then
+            # Fallback: known working release
+            XRAY_URL="https://github.com/2dust/AndroidLibXrayLite/releases/download/26.0.0/libv2ray.aar"
+          fi
+
+          echo "Downloading libv2ray from: $XRAY_URL"
+          curl -L -o libv2ray.aar "$XRAY_URL"
+          ls -lh libv2ray.aar
+
+      - name: Copy AARs to app/libs
         run: |
           mkdir -p app/libs
           cp wireguard-tunnel.aar app/libs/
+          cp libv2ray.aar app/libs/
           ls -lh app/libs/
 
       - name: Cache Gradle
@@ -90,36 +117,33 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VPN-Pro-v2-Debug
+          name: VPNPro-v3-Debug
           path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+          retention-days: 30
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.${{ github.run_number }}
-          name: "VPN Pro v2.0.${{ github.run_number }}"
+          tag_name: v3.0.${{ github.run_number }}
+          name: "VPN Pro v3.0.${{ github.run_number }} — WireGuard + V2Ray/Xray"
           files: app/build/outputs/apk/debug/app-debug.apk
           body: |
-            ## ✅ VPN Pro v2.0 — جاهز للتحميل
+            ## ✅ VPN Pro v3.0 — WireGuard + V2Ray/Xray
 
-            ### 🆕 مميزات الإصدار الجديد:
-            - ✅ **استيراد Config** — استورد إعدادات WireGuard من الحافظة مباشرة
-            - ✅ **بحث في السيرفرات** — ابحث بالاسم أو الموقع
-            - ✅ **Kill Switch** — يقطع الإنترنت إذا انقطع VPN
-            - ✅ **عداد المستخدمين** — يظهر عدد من اتصلوا بكل سيرفر
-            - ✅ **DNS متعدد** — Cloudflare / Google / Quad9 / AdGuard
-            - ✅ **واجهة محسّنة** — تحريكات وألوان أفضل
-            - ✅ **رسائل خطأ واضحة** — يظهر سبب فشل الاتصال
-            - ✅ **MTU قابل للتخصيص** — لحل مشاكل الاتصال
+            ### 🆕 الجديد في v3.0:
+            - ✅ **V2Ray/Xray** — دعم VMess / VLESS / Trojan
+            - ✅ **سيرفرات مجانية** — جلب تلقائي من barry-far، mahdibland، freefq
+            - ✅ **Bug Hosts مغربية** — Inwi، IAM، Orange 🇲🇦
+            - ✅ **لصق رابط** — الصق vmess:// أو vless:// أو trojan:// مباشرة
+            - ✅ **WireGuard** — محافظ على الدعم الكامل
 
-            ### 📱 التثبيت:
+            ### 📱 طريقة الاستخدام للإنترنت المجاني:
+            1. افتح التطبيق → **سيرفرات مجانية**
+            2. اضغط **Refresh** لجلب أحدث السيرفرات
+            3. اضغط **Connect** على أي سيرفر
+            4. إذا لم يشتغل، جرب سيرفراً آخر
+
+            ### 📥 التثبيت:
             1. حمّل `app-debug.apk` من الأسفل
             2. فعّل **"تثبيت من مصادر غير معروفة"** في إعدادات الهاتف
-            3. ثبّت التطبيق
-            4. أضف سيرفراتك من **Servers → Add**
-
-            ### ⚡ لتجاوز جميع القيود:
-            تأكد أن **Allowed IPs = `0.0.0.0/0, ::/0`** ليمر كل الترافيك عبر VPN
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            3. ثبّت التطبيق وافتحه
