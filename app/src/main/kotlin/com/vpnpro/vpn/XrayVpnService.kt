@@ -37,28 +37,44 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
         private val _stats = MutableStateFlow(VpnStats())
         val stats: StateFlow<VpnStats> = _stats.asStateFlow()
 
-        /** Expose an error from outside the service (e.g. when config parsing fails) */
+        /** Set error state from outside the service (e.g. config parse failure) */
         fun setError(message: String) {
             _state.value     = VpnState.ERROR
             _lastError.value = message
         }
+
+        /** Force state reset without going through the service (fallback when startService fails) */
+        fun forceDisconnect() {
+            _state.value               = VpnState.DISCONNECTED
+            _connectedServerName.value = null
+            _stats.value               = VpnStats()
+            _lastError.value           = null
+        }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var tunInterface: ParcelFileDescriptor? = null
+    private val scope      = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var tunFd: ParcelFileDescriptor? = null
+    private var isForeground = false   // track whether startForeground was called
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        XrayController.init(this)
+        try {
+            XrayController.init(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "XrayController.init failed: ${e.message}", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+        Log.d(TAG, "onStartCommand action=$action")
+        when (action) {
             ACTION_CONNECT    -> handleConnect(intent)
             ACTION_DISCONNECT -> handleDisconnect()
+            else              -> safeStopSelf()   // null / unknown — stop cleanly
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?) = null
@@ -75,7 +91,7 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
     // ── CoreCallbackHandler ───────────────────────────────────────────────
 
     override fun startup(): Long {
-        Log.i(TAG, "Xray core startup callback")
+        Log.i(TAG, "Xray core startup")
         return 0
     }
 
@@ -97,16 +113,19 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
     // ── Connect / Disconnect ──────────────────────────────────────────────
 
     private fun handleConnect(intent: Intent) {
-        val configJson = intent.getStringExtra(EXTRA_CONFIG_JSON) ?: return
+        val configJson = intent.getStringExtra(EXTRA_CONFIG_JSON) ?: run {
+            Log.w(TAG, "handleConnect: missing config"); return
+        }
         val serverName = intent.getStringExtra(EXTRA_SERVER_NAME) ?: "VPN"
 
         _state.value     = VpnState.CONNECTING
         _lastError.value = null
-        showNotification("Connecting to $serverName…")
+
+        // startForeground must be called synchronously before the coroutine
+        safeStartForeground("Connecting to $serverName…")
 
         scope.launch {
             try {
-                // Build TUN interface
                 val tun = Builder()
                     .addAddress("10.0.0.1", 24)
                     .addRoute("0.0.0.0", 0)
@@ -118,46 +137,45 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
                     .establish()
                     ?: throw Exception("فشل إنشاء نفق VPN — تأكد من منح إذن VPN")
 
-                tunInterface = tun
+                tunFd = tun
                 XrayController.start(configJson, tun.fd, this@XrayVpnService)
 
-                // Give Xray a moment to start
                 delay(1500)
 
                 if (XrayController.isRunning) {
-                    _state.value = VpnState.CONNECTED
+                    _state.value               = VpnState.CONNECTED
                     _connectedServerName.value = serverName
-                    _stats.value = VpnStats(connectedSince = System.currentTimeMillis())
-                    showNotification("Connected — $serverName")
+                    _stats.value               = VpnStats(connectedSince = System.currentTimeMillis())
+                    safeStartForeground("Connected — $serverName")
                     startStatsPolling()
                 } else {
-                    throw Exception("فشل تشغيل Xray core")
+                    throw Exception("فشل تشغيل Xray core — جرب سيرفراً آخر")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Connect failed: ${e.message}", e)
                 _state.value     = VpnState.ERROR
                 _lastError.value = e.message ?: "فشل الاتصال"
-                showNotification("Connection failed")
+                safeStartForeground("Connection failed")
                 closeTun()
             }
         }
     }
 
     private fun handleDisconnect() {
+        Log.d(TAG, "handleDisconnect, isForeground=$isForeground")
         scope.launch {
-            XrayController.stop()
+            try { XrayController.stop() } catch (e: Exception) { Log.w(TAG, "XrayController.stop: ${e.message}") }
             closeTun()
-            _state.value             = VpnState.DISCONNECTED
+            _state.value               = VpnState.DISCONNECTED
             _connectedServerName.value = null
-            _stats.value             = VpnStats()
+            _stats.value               = VpnStats()
         }
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        safeStopSelf()
     }
 
     private fun closeTun() {
-        try { tunInterface?.close() } catch (_: Exception) {}
-        tunInterface = null
+        try { tunFd?.close() } catch (_: Exception) {}
+        tunFd = null
     }
 
     private fun startStatsPolling() {
@@ -165,11 +183,37 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
             val start = System.currentTimeMillis()
             while (isActive && _state.value == VpnState.CONNECTED) {
                 delay(2000)
-                _stats.value = _stats.value.copy(
-                    connectedSince = start
-                )
+                _stats.value = _stats.value.copy(connectedSince = start)
             }
         }
+    }
+
+    // ── Safe foreground helpers ───────────────────────────────────────────
+
+    private fun safeStartForeground(status: String) {
+        try {
+            val notif = buildNotification(status)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIF_ID, notif)
+            }
+            isForeground = true
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed: ${e.message}", e)
+        }
+    }
+
+    private fun safeStopSelf() {
+        try {
+            if (isForeground) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                isForeground = false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "stopForeground failed: ${e.message}")
+        }
+        try { stopSelf() } catch (e: Exception) { Log.w(TAG, "stopSelf failed: ${e.message}") }
     }
 
     // ── Notification ──────────────────────────────────────────────────────
@@ -183,7 +227,7 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
         }
     }
 
-    private fun showNotification(status: String) {
+    private fun buildNotification(status: String): Notification {
         val stopIntent = PendingIntent.getService(
             this, 0,
             Intent(this, XrayVpnService::class.java).also { it.action = ACTION_DISCONNECT },
@@ -192,7 +236,7 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
         val openIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("VPN Pro — Xray")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
@@ -200,11 +244,5 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, "Disconnect", stopIntent)
             .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIF_ID, notif)
-        }
     }
 }

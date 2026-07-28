@@ -1,6 +1,7 @@
 package com.vpnpro.ui.screens
 
 import android.net.VpnService
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -32,6 +33,8 @@ import com.vpnpro.ui.viewmodel.MainViewModel
 import com.vpnpro.utils.FormatUtils
 import com.vpnpro.vpn.VpnState
 
+private const val TAG = "HomeScreen"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -55,10 +58,23 @@ fun HomeScreen(
         }
     }
 
-    // VPN permission launcher
+    // ── VPN permission launcher ───────────────────────────────────────────
+    // IMPORTANT: wrap vm.connect() in try-catch — any uncaught exception here
+    // will crash the Activity (the callback runs on the main thread).
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { vm.connect() }
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            try {
+                vm.connect()
+            } catch (e: Exception) {
+                Log.e(TAG, "connect() after permission grant threw: ${e.message}", e)
+                com.vpnpro.vpn.XrayVpnService.setError("فشل الاتصال: ${e.message}")
+                com.vpnpro.vpn.VpnProService.setError("فشل الاتصال: ${e.message}")
+            }
+        }
+        // If result is not OK the user cancelled the VPN permission dialog — do nothing
+    }
 
     // Pulse animation when CONNECTING
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -151,14 +167,12 @@ fun HomeScreen(
 
             // ── Power button ───────────────────────────────────────────────
             Box(contentAlignment = Alignment.Center) {
-                // Outer ring
                 Box(
                     Modifier
                         .size(200.dp)
                         .scale(buttonScale)
                         .background(ringColor.copy(alpha = 0.12f), CircleShape)
                 )
-                // Middle ring
                 Box(
                     Modifier
                         .size(170.dp)
@@ -168,14 +182,25 @@ fun HomeScreen(
 
                 Button(
                     onClick = {
-                        if (vpnState == VpnState.CONNECTED || vpnState == VpnState.CONNECTING) {
-                            vm.disconnect()
-                        } else {
-                            if (selectedServer != null) {
-                                val prepare = VpnService.prepare(context)
-                                if (prepare != null) permLauncher.launch(prepare)
-                                else vm.connect()
+                        try {
+                            when {
+                                vpnState == VpnState.CONNECTED || vpnState == VpnState.CONNECTING -> {
+                                    vm.disconnect()
+                                }
+                                selectedServer != null -> {
+                                    val prepare = VpnService.prepare(context)
+                                    if (prepare != null) {
+                                        permLauncher.launch(prepare)
+                                    } else {
+                                        vm.connect()
+                                    }
+                                }
+                                // No server selected — do nothing (hint shown below)
                             }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Power button onClick threw: ${e.message}", e)
+                            com.vpnpro.vpn.XrayVpnService.setError("فشل: ${e.message}")
+                            com.vpnpro.vpn.VpnProService.setError("فشل: ${e.message}")
                         }
                     },
                     shape  = CircleShape,
@@ -192,7 +217,7 @@ fun HomeScreen(
                 ) {
                     Icon(
                         imageVector = when (vpnState) {
-                            VpnState.CONNECTED  -> Icons.Default.PowerSettingsNew
+                            VpnState.CONNECTING -> Icons.Default.Sync
                             VpnState.ERROR      -> Icons.Default.Refresh
                             else                -> Icons.Default.PowerSettingsNew
                         },
@@ -243,18 +268,9 @@ fun HomeScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    StatCard(
-                        "Time", FormatUtils.formatDuration(elapsed),
-                        Icons.Default.Timer, Modifier.weight(1f)
-                    )
-                    StatCard(
-                        "Download", FormatUtils.formatBytes(vpnStats.bytesIn),
-                        Icons.Default.ArrowDownward, Modifier.weight(1f)
-                    )
-                    StatCard(
-                        "Upload", FormatUtils.formatBytes(vpnStats.bytesOut),
-                        Icons.Default.ArrowUpward, Modifier.weight(1f)
-                    )
+                    StatCard("Time",     FormatUtils.formatDuration(elapsed),        Icons.Default.Timer,        Modifier.weight(1f))
+                    StatCard("Download", FormatUtils.formatBytes(vpnStats.bytesIn),  Icons.Default.ArrowDownward, Modifier.weight(1f))
+                    StatCard("Upload",   FormatUtils.formatBytes(vpnStats.bytesOut), Icons.Default.ArrowUpward,   Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -312,9 +328,7 @@ fun HomeScreen(
                 OutlinedButton(
                     onClick = onOpenFree,
                     modifier = Modifier.weight(1f),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        width = 1.dp
-                    )
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
                 ) {
                     Icon(Icons.Default.Public, null, Modifier.size(16.dp), tint = AccentGreen)
                     Spacer(Modifier.width(6.dp))
@@ -335,15 +349,16 @@ fun HomeScreen(
     }
 }
 
-// Helper extension
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 @Composable
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier {
-    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val interactionSource = remember { MutableInteractionSource() }
     return this.then(
         Modifier.clickable(
-            indication = null,
+            indication        = null,
             interactionSource = interactionSource,
-            onClick = onClick
+            onClick           = onClick
         )
     )
 }

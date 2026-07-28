@@ -3,6 +3,7 @@ package com.vpnpro.ui.viewmodel
 import android.app.Application
 import android.content.Intent
 import android.net.VpnService
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vpnpro.data.firebase.FirebaseRepository
@@ -18,6 +19,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val TAG = "MainViewModel"
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -89,8 +92,7 @@ class MainViewModel @Inject constructor(
     private val _freeConfigsError = MutableStateFlow<String?>(null)
     val freeConfigsError: StateFlow<String?> = _freeConfigsError.asStateFlow()
 
-    // ── VPN permission request state ───────────────────────────────────────
-    // Set to a pending free config that needs VPN permission before connecting.
+    // ── VPN permission pending state ──────────────────────────────────────
     private val _pendingFreeConfig = MutableStateFlow<FreeConfigFetcher.FreeConfig?>(null)
     val pendingFreeConfig: StateFlow<FreeConfigFetcher.FreeConfig?> = _pendingFreeConfig.asStateFlow()
 
@@ -102,51 +104,93 @@ class MainViewModel @Inject constructor(
 
     fun connect() {
         val server = _selectedServer.value ?: return
-        disconnectAll()
+        try {
+            // ── 1. Stop only the service that is currently active ──────────
+            // Never start a service just to stop it — that causes crashes on
+            // Android 12+ (ForegroundServiceStartNotAllowedException).
+            disconnectAll()
 
-        when (server.serverProtocol) {
-            ServerProtocol.WIREGUARD -> connectWireGuard(server)
-            ServerProtocol.XRAY      -> connectXray(server)
+            // ── 2. Start the appropriate service ──────────────────────────
+            when (server.serverProtocol) {
+                ServerProtocol.WIREGUARD -> connectWireGuard(server)
+                ServerProtocol.XRAY      -> connectXray(server)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "connect() threw: ${e.message}", e)
+            // Surface the error to the UI so the user sees it instead of a crash
+            VpnProService.setError("فشل الاتصال: ${e.message}")
+            XrayVpnService.setError("فشل الاتصال: ${e.message}")
         }
     }
 
     private fun connectWireGuard(server: Server) {
-        val intent = Intent(ctx, VpnProService::class.java).apply {
-            action = VpnProService.ACTION_CONNECT
-            putExtra(VpnProService.EXTRA_CONFIG, server.toWireGuardConfig())
-            putExtra(VpnProService.EXTRA_SERVER_NAME, server.name)
+        runCatching {
+            val intent = Intent(ctx, VpnProService::class.java).apply {
+                action = VpnProService.ACTION_CONNECT
+                putExtra(VpnProService.EXTRA_CONFIG, server.toWireGuardConfig())
+                putExtra(VpnProService.EXTRA_SERVER_NAME, server.name)
+            }
+            ctx.startService(intent)
+            viewModelScope.launch { runCatching { repo.incrementUsage(server.id) } }
+        }.onFailure { e ->
+            Log.e(TAG, "connectWireGuard failed: ${e.message}", e)
+            VpnProService.setError("فشل بدء WireGuard: ${e.message}")
         }
-        ctx.startService(intent)
-        viewModelScope.launch { runCatching { repo.incrementUsage(server.id) } }
     }
 
     private fun connectXray(server: Server) {
-        val intent = Intent(ctx, XrayVpnService::class.java).apply {
-            action = XrayVpnService.ACTION_CONNECT
-            putExtra(XrayVpnService.EXTRA_CONFIG_JSON, server.xrayConfigJson)
-            putExtra(XrayVpnService.EXTRA_SERVER_NAME, server.name)
+        runCatching {
+            val intent = Intent(ctx, XrayVpnService::class.java).apply {
+                action = XrayVpnService.ACTION_CONNECT
+                putExtra(XrayVpnService.EXTRA_CONFIG_JSON, server.xrayConfigJson)
+                putExtra(XrayVpnService.EXTRA_SERVER_NAME, server.name)
+            }
+            ctx.startService(intent)
+            viewModelScope.launch { runCatching { repo.incrementUsage(server.id) } }
+        }.onFailure { e ->
+            Log.e(TAG, "connectXray failed: ${e.message}", e)
+            XrayVpnService.setError("فشل بدء Xray: ${e.message}")
         }
-        ctx.startService(intent)
-        viewModelScope.launch { runCatching { repo.incrementUsage(server.id) } }
     }
 
     fun disconnect() = disconnectAll()
 
+    /**
+     * Stops active VPN services.
+     * IMPORTANT: Only sends DISCONNECT to a service that is currently
+     * running (not DISCONNECTED). Starting a VPN service just to stop it
+     * throws ForegroundServiceStartNotAllowedException on Android 12+.
+     */
     private fun disconnectAll() {
-        ctx.startService(Intent(ctx, VpnProService::class.java).apply {
-            action = VpnProService.ACTION_DISCONNECT
-        })
-        ctx.startService(Intent(ctx, XrayVpnService::class.java).apply {
-            action = XrayVpnService.ACTION_DISCONNECT
-        })
+        // WireGuard service
+        if (VpnProService.state.value != VpnState.DISCONNECTED) {
+            runCatching {
+                ctx.startService(Intent(ctx, VpnProService::class.java).apply {
+                    action = VpnProService.ACTION_DISCONNECT
+                })
+            }.onFailure { e ->
+                Log.w(TAG, "WireGuard disconnect failed: ${e.message}")
+                VpnProService.forceDisconnect()
+            }
+        }
+        // Xray service
+        if (XrayVpnService.state.value != VpnState.DISCONNECTED) {
+            runCatching {
+                ctx.startService(Intent(ctx, XrayVpnService::class.java).apply {
+                    action = XrayVpnService.ACTION_DISCONNECT
+                })
+            }.onFailure { e ->
+                Log.w(TAG, "Xray disconnect failed: ${e.message}")
+                XrayVpnService.forceDisconnect()
+            }
+        }
     }
 
     fun needsVpnPermission(): Boolean = VpnService.prepare(ctx) != null
 
     /**
      * Attempt to connect to a free config.
-     * Returns true if VPN permission is still needed (caller must launch permission dialog).
-     * Returns false if connection was initiated directly.
+     * Returns true if VPN permission is still needed (caller must show dialog).
      */
     fun connectFreeConfig(freeConfig: FreeConfigFetcher.FreeConfig): Boolean {
         val needsPermission = VpnService.prepare(ctx) != null
@@ -158,14 +202,12 @@ class MainViewModel @Inject constructor(
         return false
     }
 
-    /** Called after VPN permission is granted — connects the pending free config. */
     fun onVpnPermissionGranted() {
         val config = _pendingFreeConfig.value ?: return
         _pendingFreeConfig.value = null
         doConnectFreeConfig(config)
     }
 
-    /** Cancel any pending free config waiting for VPN permission. */
     fun clearPendingFreeConfig() {
         _pendingFreeConfig.value = null
     }
@@ -176,9 +218,17 @@ class MainViewModel @Inject constructor(
                 val result = ConfigParser.parse(freeConfig.link)
                 val server = Server.fromXrayLink(freeConfig.link, result.json, freeConfig.name)
                 _selectedServer.value = server
-                disconnectAll()
+                // Disconnect only Xray if it's already running
+                if (XrayVpnService.state.value != VpnState.DISCONNECTED) {
+                    runCatching {
+                        ctx.startService(Intent(ctx, XrayVpnService::class.java).apply {
+                            action = XrayVpnService.ACTION_DISCONNECT
+                        })
+                    }
+                }
                 connectXray(server)
             } catch (e: Exception) {
+                Log.e(TAG, "doConnectFreeConfig failed: ${e.message}", e)
                 XrayVpnService.setError("فشل تحليل الرابط: ${e.message}")
             }
         }
@@ -212,7 +262,6 @@ class MainViewModel @Inject constructor(
         addServer(server)
     }
 
-    /** Parse a VMess/VLESS/Trojan link and save it as an Xray server */
     fun importXrayLink(link: String) {
         viewModelScope.launch {
             _addServerLoading.value = true
@@ -230,7 +279,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Fetch free configs from public repositories */
     fun fetchFreeConfigs() {
         viewModelScope.launch {
             _freeConfigsLoading.value = true
@@ -250,18 +298,13 @@ class MainViewModel @Inject constructor(
     }
 
     fun updateServer(server: Server) {
-        viewModelScope.launch {
-            runCatching { repo.updateServer(server) }
-        }
+        viewModelScope.launch { runCatching { repo.updateServer(server) } }
     }
 
     fun deleteServer(serverId: String) {
-        viewModelScope.launch {
-            runCatching { repo.deleteServer(serverId) }
-        }
+        viewModelScope.launch { runCatching { repo.deleteServer(serverId) } }
     }
 
-    /** Toggle the favourite/star flag on a server */
     fun toggleFavorite(server: Server) {
         updateServer(server.copy(isFavorite = !server.isFavorite))
     }
