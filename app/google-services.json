@@ -1,14 +1,14 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "firebase_url": "https://vpn-pro-default-rtdb.firebaseio.com",
-    "project_id": "vpn-pro-app",
-    "storage_bucket": "vpn-pro-app.appspot.com"
+    "project_number": "170112464133",
+    "firebase_url": "https://elkhalfy-512a3-default-rtdb.firebaseio.com",
+    "project_id": "elkhalfy-512a3",
+    "storage_bucket": "elkhalfy-512a3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "mobilesdk_app_id": "1:170112464133:android:fbc06a699b615551",
         "android_client_info": {
           "package_name": "com.vpnpro"
         }
@@ -16,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDummy00000000000000000000000000000"
+          "current_key": "AIzaSyAf-bdKobNR5fcHU5hDn0Rb6CkNHheJ0uQ"
         }
       ],
       "services": {
