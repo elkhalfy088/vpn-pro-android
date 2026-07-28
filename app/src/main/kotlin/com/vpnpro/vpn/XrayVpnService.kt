@@ -36,6 +36,12 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
 
         private val _stats = MutableStateFlow(VpnStats())
         val stats: StateFlow<VpnStats> = _stats.asStateFlow()
+
+        /** Expose an error from outside the service (e.g. when config parsing fails) */
+        fun setError(message: String) {
+            _state.value     = VpnState.ERROR
+            _lastError.value = message
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -110,7 +116,7 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
                     .setSession("VPN Pro Xray")
                     .setMtu(1500)
                     .establish()
-                    ?: throw Exception("Failed to establish TUN interface")
+                    ?: throw Exception("فشل إنشاء نفق VPN — تأكد من منح إذن VPN")
 
                 tunInterface = tun
                 XrayController.start(configJson, tun.fd, this@XrayVpnService)
@@ -125,12 +131,12 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
                     showNotification("Connected — $serverName")
                     startStatsPolling()
                 } else {
-                    throw Exception("Xray core failed to start")
+                    throw Exception("فشل تشغيل Xray core")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Connect failed: ${e.message}", e)
                 _state.value     = VpnState.ERROR
-                _lastError.value = e.message ?: "Connection failed"
+                _lastError.value = e.message ?: "فشل الاتصال"
                 showNotification("Connection failed")
                 closeTun()
             }

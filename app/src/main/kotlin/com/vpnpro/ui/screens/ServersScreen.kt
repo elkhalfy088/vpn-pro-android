@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,7 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,15 +34,18 @@ fun ServersScreen(
     val vpnState       by vm.vpnState.collectAsState()
     val connectedName  by vm.connectedServerName.collectAsState()
 
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery    by remember { mutableStateOf("") }
+    var showFavOnly    by remember { mutableStateOf(false) }
     var serverToDelete by remember { mutableStateOf<Server?>(null) }
     var serverToEdit   by remember { mutableStateOf<Server?>(null) }
 
     // Filter
     val filtered = servers.filter {
-        searchQuery.isBlank() ||
-        it.name.contains(searchQuery, ignoreCase = true) ||
-        it.location.contains(searchQuery, ignoreCase = true)
+        val matchesSearch = searchQuery.isBlank() ||
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.location.contains(searchQuery, ignoreCase = true)
+        val matchesFav = !showFavOnly || it.isFavorite
+        matchesSearch && matchesFav
     }
 
     // Delete confirmation
@@ -137,11 +138,19 @@ fun ServersScreen(
                     fontWeight = FontWeight.Bold, fontSize = 20.sp, color = OnSurface,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
+                // ⭐ Toggle favourites filter
+                IconButton(onClick = { showFavOnly = !showFavOnly }) {
+                    Icon(
+                        imageVector = if (showFavOnly) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "المفضلة",
+                        tint = if (showFavOnly) AccentOrange else OnSurfaceVariant
+                    )
+                }
                 IconButton(onClick = onAddServer) {
                     Icon(Icons.Default.Add, null, tint = AccentCyan)
                 }
             }
-            Divider(color = Surface3, thickness = 0.5.dp)
+            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
 
             // ── Search ─────────────────────────────────────────────────────
             OutlinedTextField(
@@ -190,6 +199,17 @@ fun ServersScreen(
                         }
                     }
                 }
+                filtered.isEmpty() && showFavOnly -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.StarBorder, null, Modifier.size(48.dp), tint = OnSurfaceMuted)
+                            Spacer(Modifier.height(12.dp))
+                            Text("لا يوجد سيرفرات مفضلة", color = OnSurfaceVariant, fontSize = 16.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Text("اضغط ⭐ على أي سيرفر لإضافته للمفضلة", color = OnSurfaceMuted, fontSize = 13.sp)
+                        }
+                    }
+                }
                 filtered.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("لا نتائج لـ \"$searchQuery\"", color = OnSurfaceVariant)
@@ -200,16 +220,51 @@ fun ServersScreen(
                         Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
-                        items(filtered, key = { it.id }) { server ->
-                            val isSelected  = selectedServer?.id == server.id
-                            val isConnected = isSelected && vpnState == VpnState.CONNECTED
+                        // Show favourites first
+                        val favServers   = filtered.filter { it.isFavorite }
+                        val otherServers = filtered.filter { !it.isFavorite }
+
+                        if (favServers.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "⭐ المفضلة",
+                                    fontSize = 11.sp, color = AccentOrange,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                                )
+                            }
+                            items(favServers, key = { it.id + "_fav" }) { server ->
+                                ServerCard(
+                                    server      = server,
+                                    isSelected  = selectedServer?.id == server.id,
+                                    isConnected = selectedServer?.id == server.id && vpnState == VpnState.CONNECTED,
+                                    onSelect    = { vm.selectServer(server) },
+                                    onEdit      = { serverToEdit = server },
+                                    onDelete    = { serverToDelete = server },
+                                    onToggleStar = { vm.toggleFavorite(server) }
+                                )
+                            }
+                            if (otherServers.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "كل السيرفرات",
+                                        fontSize = 11.sp, color = OnSurfaceMuted,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        items(otherServers, key = { it.id }) { server ->
                             ServerCard(
-                                server     = server,
-                                isSelected = isSelected,
-                                isConnected= isConnected,
-                                onSelect   = { vm.selectServer(server) },
-                                onEdit     = { serverToEdit = server },
-                                onDelete   = { serverToDelete = server }
+                                server      = server,
+                                isSelected  = selectedServer?.id == server.id,
+                                isConnected = selectedServer?.id == server.id && vpnState == VpnState.CONNECTED,
+                                onSelect    = { vm.selectServer(server) },
+                                onEdit      = { serverToEdit = server },
+                                onDelete    = { serverToDelete = server },
+                                onToggleStar = { vm.toggleFavorite(server) }
                             )
                         }
                         item { Spacer(Modifier.height(16.dp)) }
@@ -229,11 +284,12 @@ private fun ServerCard(
     isConnected: Boolean,
     onSelect: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onToggleStar: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    val isXray = server.serverProtocol == ServerProtocol.XRAY
+    val isXray     = server.serverProtocol == ServerProtocol.XRAY
     val protoLabel = if (isXray) "V2Ray/Xray" else "WireGuard"
     val protoColor = if (isXray) AccentGreen else AccentCyan
 
@@ -303,9 +359,21 @@ private fun ServerCard(
                 }
             }
 
+            // ⭐ Star / Favourite button
+            IconButton(
+                onClick = onToggleStar,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = if (server.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (server.isFavorite) "إزالة من المفضلة" else "إضافة للمفضلة",
+                    tint = if (server.isFavorite) AccentOrange else OnSurfaceMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             // Selected / Connected indicator
             if (isSelected) {
-                Spacer(Modifier.width(8.dp))
                 Icon(
                     if (isConnected) Icons.Default.CheckCircle else Icons.Default.RadioButtonChecked,
                     null,

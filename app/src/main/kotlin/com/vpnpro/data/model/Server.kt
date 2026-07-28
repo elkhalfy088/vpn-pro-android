@@ -29,6 +29,7 @@ data class Server(
     val addedAt: Long = 0L,
     val usageCount: Int = 0,
     val isPremium: Boolean = false,
+    val isFavorite: Boolean = false,
     val category: String = "General"
 ) {
     val serverProtocol: ServerProtocol

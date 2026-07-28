@@ -89,6 +89,11 @@ class MainViewModel @Inject constructor(
     private val _freeConfigsError = MutableStateFlow<String?>(null)
     val freeConfigsError: StateFlow<String?> = _freeConfigsError.asStateFlow()
 
+    // ── VPN permission request state ───────────────────────────────────────
+    // Set to a pending free config that needs VPN permission before connecting.
+    private val _pendingFreeConfig = MutableStateFlow<FreeConfigFetcher.FreeConfig?>(null)
+    val pendingFreeConfig: StateFlow<FreeConfigFetcher.FreeConfig?> = _pendingFreeConfig.asStateFlow()
+
     // ── Actions ────────────────────────────────────────────────────────────
 
     fun selectServer(server: Server) {
@@ -138,6 +143,47 @@ class MainViewModel @Inject constructor(
 
     fun needsVpnPermission(): Boolean = VpnService.prepare(ctx) != null
 
+    /**
+     * Attempt to connect to a free config.
+     * Returns true if VPN permission is still needed (caller must launch permission dialog).
+     * Returns false if connection was initiated directly.
+     */
+    fun connectFreeConfig(freeConfig: FreeConfigFetcher.FreeConfig): Boolean {
+        val needsPermission = VpnService.prepare(ctx) != null
+        if (needsPermission) {
+            _pendingFreeConfig.value = freeConfig
+            return true
+        }
+        doConnectFreeConfig(freeConfig)
+        return false
+    }
+
+    /** Called after VPN permission is granted — connects the pending free config. */
+    fun onVpnPermissionGranted() {
+        val config = _pendingFreeConfig.value ?: return
+        _pendingFreeConfig.value = null
+        doConnectFreeConfig(config)
+    }
+
+    /** Cancel any pending free config waiting for VPN permission. */
+    fun clearPendingFreeConfig() {
+        _pendingFreeConfig.value = null
+    }
+
+    private fun doConnectFreeConfig(freeConfig: FreeConfigFetcher.FreeConfig) {
+        viewModelScope.launch {
+            try {
+                val result = ConfigParser.parse(freeConfig.link)
+                val server = Server.fromXrayLink(freeConfig.link, result.json, freeConfig.name)
+                _selectedServer.value = server
+                disconnectAll()
+                connectXray(server)
+            } catch (e: Exception) {
+                XrayVpnService.setError("فشل تحليل الرابط: ${e.message}")
+            }
+        }
+    }
+
     fun addServer(server: Server) {
         viewModelScope.launch {
             _addServerLoading.value = true
@@ -184,20 +230,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Connect directly to a free config link without saving to Firebase */
-    fun connectFreeConfig(freeConfig: FreeConfigFetcher.FreeConfig) {
-        viewModelScope.launch {
-            try {
-                val result = ConfigParser.parse(freeConfig.link)
-                val server = Server.fromXrayLink(freeConfig.link, result.json, freeConfig.name)
-                _selectedServer.value = server
-                connect()
-            } catch (e: Exception) {
-                // ignore — show in UI via vpnState ERROR
-            }
-        }
-    }
-
     /** Fetch free configs from public repositories */
     fun fetchFreeConfigs() {
         viewModelScope.launch {
@@ -227,6 +259,11 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repo.deleteServer(serverId) }
         }
+    }
+
+    /** Toggle the favourite/star flag on a server */
+    fun toggleFavorite(server: Server) {
+        updateServer(server.copy(isFavorite = !server.isFavorite))
     }
 
     fun clearAddServerResult() {

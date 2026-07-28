@@ -1,7 +1,10 @@
 package com.vpnpro.ui.screens
 
+import android.app.Activity
+import android.net.VpnService
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,11 +31,26 @@ fun FreeServersScreen(
     vm: MainViewModel,
     onBack: () -> Unit
 ) {
+    val context  = LocalContext.current
     val configs  by vm.freeConfigs.collectAsState()
     val loading  by vm.freeConfigsLoading.collectAsState()
     val error    by vm.freeConfigsError.collectAsState()
 
     var activeTab by remember { mutableIntStateOf(0) }  // 0=سيرفرات مجانية 1=Bug Hosts
+
+    // ── VPN permission handling ────────────────────────────────────────────
+    // When connectFreeConfig returns true (needs permission), this launcher
+    // shows the system VPN consent dialog. After the user grants permission,
+    // we call onVpnPermissionGranted() to complete the connection.
+    val vpnPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            vm.onVpnPermissionGranted()
+        } else {
+            vm.clearPendingFreeConfig()
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (configs.isEmpty()) vm.fetchFreeConfigs()
@@ -58,7 +78,7 @@ fun FreeServersScreen(
                     }
                 }
             }
-            Divider(color = Surface3, thickness = 0.5.dp)
+            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
 
             // ── Tabs ────────────────────────────────────────────────────────
             TabRow(
@@ -83,7 +103,24 @@ fun FreeServersScreen(
             }
 
             when (activeTab) {
-                0 -> FreeConfigsList(configs, loading, error, vm)
+                0 -> FreeConfigsList(
+                    configs   = configs,
+                    loading   = loading,
+                    error     = error,
+                    onConnect = { config ->
+                        // Check VPN permission before connecting — prevents instant crash/exit
+                        val needsPermission = vm.connectFreeConfig(config)
+                        if (needsPermission) {
+                            val prepare = VpnService.prepare(context)
+                            if (prepare != null) {
+                                vpnPermLauncher.launch(prepare)
+                            } else {
+                                vm.onVpnPermissionGranted()
+                            }
+                        }
+                    },
+                    onRetry   = { vm.fetchFreeConfigs() }
+                )
                 1 -> BugHostsTab()
             }
         }
@@ -97,7 +134,8 @@ private fun FreeConfigsList(
     configs: List<FreeConfigFetcher.FreeConfig>,
     loading: Boolean,
     error: String?,
-    vm: MainViewModel
+    onConnect: (FreeConfigFetcher.FreeConfig) -> Unit,
+    onRetry: () -> Unit
 ) {
     Box(Modifier.fillMaxSize()) {
         when {
@@ -126,7 +164,7 @@ private fun FreeConfigsList(
                     Text(error, color = OnSurfaceVariant, fontSize = 13.sp)
                     Spacer(Modifier.height(16.dp))
                     Button(
-                        onClick = { vm.fetchFreeConfigs() },
+                        onClick = onRetry,
                         colors  = ButtonDefaults.buttonColors(containerColor = AccentCyan)
                     ) {
                         Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
@@ -156,7 +194,7 @@ private fun FreeConfigsList(
                         }
                     }
                     items(configs, key = { it.link }) { config ->
-                        FreeConfigCard(config = config, onConnect = { vm.connectFreeConfig(config) })
+                        FreeConfigCard(config = config, onConnect = { onConnect(config) })
                     }
                     item { Spacer(Modifier.height(16.dp)) }
                 }
@@ -170,19 +208,22 @@ private fun FreeConfigCard(
     config: FreeConfigFetcher.FreeConfig,
     onConnect: () -> Unit
 ) {
+    // Prevent double-tap: disable button immediately after first press
+    var pressed by remember { mutableStateOf(false) }
+
     Card(
         shape  = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = Surface1),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable(onClick = onConnect)
+        // No .clickable on the Card — the Button inside handles the tap.
+        // Having both causes double-invocation of onConnect.
     ) {
         Row(
             Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Protocol icon
             val proto = when {
                 config.link.startsWith("vmess://")  -> "VMess"
                 config.link.startsWith("vless://")  -> "VLESS"
@@ -223,13 +264,27 @@ private fun FreeConfigCard(
 
             Spacer(Modifier.width(8.dp))
             Button(
-                onClick = onConnect,
+                onClick = {
+                    if (!pressed) {
+                        pressed = true
+                        onConnect()
+                    }
+                },
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen.copy(alpha = 0.8f))
+                colors  = ButtonDefaults.buttonColors(containerColor = AccentGreen.copy(alpha = 0.8f)),
+                enabled = !pressed
             ) {
-                Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (pressed) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(14.dp),
+                        color       = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Connect", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
