@@ -29,15 +29,15 @@ jobs:
       - name: Install Android NDK
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;25.2.9519653" 2>&1 | grep -E "^(Installed|Error)" || true
-          echo "NDK_DIR=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+            "ndk;28.2.13676358" 2>&1 | grep -E "^(Installed|Error)" || true
+          echo "NDK_DIR=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
 
       - name: Cache WireGuard tunnel AAR
         id: wg-cache
         uses: actions/cache@v4
         with:
           path: wireguard-tunnel.aar
-          key: wireguard-tunnel-latest-ndk25-v2
+          key: wireguard-tunnel-latest-ndk28-v1
 
       - name: Clone and build WireGuard tunnel
         if: steps.wg-cache.outputs.cache-hit != 'true'
@@ -55,7 +55,7 @@ jobs:
 
           cd /tmp/wg-android
           printf "sdk.dir=%s\nndk.dir=%s\n" \
-            "$ANDROID_HOME" "$ANDROID_HOME/ndk/25.2.9519653" > local.properties
+            "$ANDROID_HOME" "$ANDROID_HOME/ndk/28.2.13676358" > local.properties
           chmod +x gradlew
           ./gradlew :tunnel:assembleRelease --no-daemon -q
           AAR=$(find tunnel/build/outputs/aar -name "*.aar" | head -1)
