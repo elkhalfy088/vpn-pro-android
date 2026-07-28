@@ -68,8 +68,8 @@ class XrayVpnService : VpnService(), CoreCallbackHandler {
 
     // ── CoreCallbackHandler ───────────────────────────────────────────────
 
-    override fun setup(status: String): Long {
-        Log.i(TAG, "Xray core setup: $status")
+    override fun startup(): Long {
+        Log.i(TAG, "Xray core startup callback")
         return 0
     }
 

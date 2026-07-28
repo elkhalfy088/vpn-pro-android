@@ -31,7 +31,7 @@ object XrayController {
         stopInternal()
         try {
             val ctrl = Libv2ray.newCoreController(handler)
-            ctrl.startLoop(configJson, tunFd.toLong())
+            ctrl.startLoop(configJson, tunFd)
             controller = ctrl
             Log.i(TAG, "Xray startLoop called, tunFd=$tunFd")
         } catch (e: Exception) {
