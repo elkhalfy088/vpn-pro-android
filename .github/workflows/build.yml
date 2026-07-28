@@ -19,10 +19,12 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+          cache-read-only: false
 
       - name: Setup WireGuard Maven credentials
         run: |
@@ -30,17 +32,8 @@ jobs:
           echo "gpr.user=${{ github.repository_owner }}" >> ~/.gradle/gradle.properties
           echo "gpr.key=${{ secrets.GITHUB_TOKEN }}" >> ~/.gradle/gradle.properties
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
-          restore-keys: ${{ runner.os }}-gradle-
-
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: gradle assembleDebug --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
@@ -60,12 +53,11 @@ jobs:
           body: |
             ## ✅ VPN Pro APK جاهز للتحميل
 
-            > تطبيق VPN Pro مبني بـ WireGuard + Firebase
+            تطبيق VPN Pro مبني بـ WireGuard + Firebase
 
             ### تثبيت:
-            1. حمّل الـ APK من أسفل
+            1. حمّل الـ APK من الملفات أسفله
             2. فعّل "مصادر غير معروفة" في إعدادات Android
             3. ثبّت التطبيق
-            4. أضف سيرفراتك من داخل التطبيق
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
