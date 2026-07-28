@@ -1,0 +1,4 @@
+-keep class akh.vpn.dd.** { *; }
+-keep class com.google.firebase.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**

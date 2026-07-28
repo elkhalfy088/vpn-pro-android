@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "170112464133",
+    "firebase_url": "https://elkhalfy-512a3-default-rtdb.firebaseio.com",
+    "project_id": "elkhalfy-512a3",
+    "storage_bucket": "elkhalfy-512a3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:170112464133:android:4864dc74d29574e455336c",
+        "android_client_info": {
+          "package_name": "Akh.vpn.dd"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiSPIuy1t49IdTNR-MPT8OMrM5nH8x54k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

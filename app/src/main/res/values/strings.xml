@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vpn Pro</string>
+    <string name="connect">اتصال</string>
+    <string name="disconnect">قطع الاتصال</string>
+    <string name="status_connected">متصل</string>
+    <string name="status_connecting">جاري الاتصال…</string>
+    <string name="status_disconnected">غير متصل</string>
+    <string name="status_error">خطأ في الاتصال</string>
+    <string name="setup_title">إعداد السيرفر</string>
+    <string name="server_ip">IP السيرفر</string>
+    <string name="server_port">المنفذ</string>
+    <string name="decoy_domain">دومين التمويه</string>
+    <string name="save_continue">حفظ والمتابعة</string>
+    <string name="notif_title">Vpn Pro</string>
+    <string name="vpn_connected">متصل — الحماية مفعّلة</string>
+    <string name="vpn_disconnected">غير متصل</string>
+</resources>
