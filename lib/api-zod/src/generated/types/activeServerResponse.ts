@@ -5,7 +5,8 @@
  * VPN Pro API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { VpnServer } from './vpnServer';
 
-export interface HealthStatus {
-  status: string;
+export interface ActiveServerResponse {
+  server: VpnServer | null;
 }
