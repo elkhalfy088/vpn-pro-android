@@ -28,9 +28,8 @@ jobs:
 
       - name: Install Android NDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;25.2.9519653" 2>&1 | grep -E "(Installed|Error)" || true
+            "ndk;25.2.9519653" 2>&1 | grep -E "^(Installed|Error)" || true
           echo "NDK_DIR=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Cache WireGuard tunnel AAR
@@ -38,30 +37,35 @@ jobs:
         uses: actions/cache@v4
         with:
           path: wireguard-tunnel.aar
-          key: wireguard-tunnel-1.0.20230213-ndk25
+          key: wireguard-tunnel-latest-ndk25-v2
 
       - name: Clone and build WireGuard tunnel
         if: steps.wg-cache.outputs.cache-hit != 'true'
         run: |
-          # Find the right tag
+          # Get latest tag (exclude ^{} deref lines)
           TAG=$(git ls-remote --tags https://github.com/WireGuard/wireguard-android.git \
-            | grep -o 'refs/tags/[0-9].*' | sort -V | tail -1 | sed 's|refs/tags/||')
+            | awk -F'refs/tags/' '{print $2}' \
+            | grep -v '\^{}' \
+            | grep '^[0-9]' \
+            | sort -V | tail -1)
           echo "Using WireGuard Android tag: $TAG"
+
           git clone --depth 1 --branch "$TAG" \
             https://github.com/WireGuard/wireguard-android.git /tmp/wg-android
 
           cd /tmp/wg-android
-          printf "sdk.dir=%s\nndk.dir=%s\n" "$ANDROID_HOME" "${{ env.NDK_DIR }}" > local.properties
+          printf "sdk.dir=%s\nndk.dir=%s\n" \
+            "$ANDROID_HOME" "$ANDROID_HOME/ndk/25.2.9519653" > local.properties
           chmod +x gradlew
-          ./gradlew :tunnel:assembleRelease --no-daemon -q 2>&1 | tail -20
-          AAR=$(find /tmp/wg-android/tunnel/build/outputs/aar -name "*.aar" | head -1)
-          echo "Built AAR: $AAR"
+          ./gradlew :tunnel:assembleRelease --no-daemon -q
+          AAR=$(find tunnel/build/outputs/aar -name "*.aar" | head -1)
+          echo "Built AAR: $AAR ($(du -sh $AAR | cut -f1))"
           cp "$AAR" "$GITHUB_WORKSPACE/wireguard-tunnel.aar"
 
-      - name: Copy WireGuard AAR
+      - name: Copy WireGuard AAR to libs
         run: |
           mkdir -p app/libs
-          cp wireguard-tunnel.aar app/libs/wireguard-tunnel.aar
+          cp wireguard-tunnel.aar app/libs/
           ls -lh app/libs/
 
       - name: Cache Gradle
@@ -77,11 +81,11 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: VPN-Pro-Debug
@@ -98,8 +102,8 @@ jobs:
             ## ✅ VPN Pro APK جاهز للتحميل
 
             ### تثبيت:
-            1. حمّل `app-debug.apk`
-            2. فعّل "مصادر غير معروفة" في الإعدادات
+            1. حمّل `app-debug.apk` من الأسفل
+            2. فعّل "مصادر غير معروفة" في إعدادات Android
             3. ثبّت وأضف سيرفراتك من **Servers → Add**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
