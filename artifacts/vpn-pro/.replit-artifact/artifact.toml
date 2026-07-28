@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/"
+title = "VPN Pro"
+version = "1.0.0"
+id = "artifacts/vpn-pro"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 26078
+
+[services.development]
+run = "pnpm --filter @workspace/vpn-pro run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vpn-pro", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/vpn-pro", "run", "serve" ]
+
+[services.env]
+PORT = "26078"
+BASE_PATH = "/"

@@ -1,0 +1,106 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Setup Expo prebuild environment
+        run: |
+          cd artifacts/vpn-pro
+          cat > .env << 'EOF'
+          EXPO_PUBLIC_DOMAIN=localhost
+          EOF
+
+      - name: Prebuild Android
+        run: |
+          cd artifacts/vpn-pro
+          npx expo prebuild --platform android --no-install
+        env:
+          EXPO_PUBLIC_DOMAIN: localhost
+
+      - name: Make Gradlew executable
+        run: chmod +x artifacts/vpn-pro/android/gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd artifacts/vpn-pro/android
+          ./gradlew assembleDebug --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.configureondemand=true -Dorg.gradle.jvmargs=-Xmx4g"
+
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp artifacts/vpn-pro/android/app/build/outputs/apk/debug/app-debug.apk release/VPN-Pro-v1.0.0.apk
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VPN-Pro-APK
+          path: release/VPN-Pro-v1.0.0.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: VPN Pro v1.0.0
+          body: |
+            ## VPN Pro v1.0.0
+
+            ### Download
+            Download the APK below and install it on your Android device.
+
+            > **Note:** Enable "Install from unknown sources" in your device settings to install the APK.
+
+            ### Features
+            - Add V2Ray, VMess, VLess, Trojan, Shadowsocks servers
+            - Add HTTP/SOCKS proxy servers (ip:port@user:pass format)
+            - Quick paste parser for proxy strings
+            - Beautiful dark cyberpunk UI
+            - Shared server list — all users see the same servers
+            - Switch between servers with one tap
+          files: release/VPN-Pro-v1.0.0.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VPN Pro API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: servers
+    description: VPN server management
 paths:
   /healthz:
     get:
@@ -24,6 +26,156 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /servers:
+    get:
+      operationId: getServers
+      tags: [servers]
+      summary: List all VPN servers
+      responses:
+        "200":
+          description: List of servers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Server"
+    post:
+      operationId: createServer
+      tags: [servers]
+      summary: Add a new VPN server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerInput"
+      responses:
+        "201":
+          description: Server created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /servers/{id}:
+    get:
+      operationId: getServer
+      tags: [servers]
+      summary: Get a single server
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Server details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateServer
+      tags: [servers]
+      summary: Update a server
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerUpdate"
+      responses:
+        "200":
+          description: Server updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteServer
+      tags: [servers]
+      summary: Delete a server
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /servers/{id}/activate:
+    post:
+      operationId: activateServer
+      tags: [servers]
+      summary: Set a server as the active/connected server
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Server activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /servers/active:
+    get:
+      operationId: getActiveServer
+      tags: [servers]
+      summary: Get the currently active server
+      responses:
+        "200":
+          description: Active server or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveServerResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +186,104 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Server:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - isActive
+        - createdAt
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        type:
+          type: string
+          enum: [v2ray, proxy, vmess, vless, trojan, shadowsocks]
+        host:
+          type: ["string", "null"]
+        port:
+          type: ["number", "null"]
+        username:
+          type: ["string", "null"]
+        password:
+          type: ["string", "null"]
+        config:
+          type: ["string", "null"]
+        flag:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        ping:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    ServerInput:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          enum: [v2ray, proxy, vmess, vless, trojan, shadowsocks]
+        host:
+          type: string
+        port:
+          type: number
+        username:
+          type: string
+        password:
+          type: string
+        config:
+          type: string
+        flag:
+          type: string
+        country:
+          type: string
+
+    ServerUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          enum: [v2ray, proxy, vmess, vless, trojan, shadowsocks]
+        host:
+          type: string
+        port:
+          type: number
+        username:
+          type: string
+        password:
+          type: string
+        config:
+          type: string
+        flag:
+          type: string
+        country:
+          type: string
+
+    ActiveServerResponse:
+      type: object
+      properties:
+        server:
+          $ref: "#/components/schemas/Server"
