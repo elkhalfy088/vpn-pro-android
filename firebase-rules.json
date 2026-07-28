@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "servers": {
+      ".read": true,
+      ".write": true,
+      "$serverId": {
+        ".validate": "newData.hasChildren(['name','endpoint','serverPublicKey','clientPrivateKey','clientAddress'])"
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+-keep class com.wireguard.** { *; }
+-keep class com.vpnpro.** { *; }
+-keepattributes *Annotation*
+-dontwarn com.wireguard.**
