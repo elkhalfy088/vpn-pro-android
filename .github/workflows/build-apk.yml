@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,16 +32,42 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk VpnPro-Debug.apk
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: VpnPro-Debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: VpnPro-Debug.apk
           retention-days: 30
+
+      - name: Delete old release (if exists)
+        run: |
+          gh release delete v1.0-debug --yes 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0-debug
+          name: "VpnPro Debug APK — تحميل مباشر"
+          body: |
+            ## تحميل التطبيق
+
+            انقر على الملف أدناه لتحميل APK مباشرةً.
+
+            **الإصدار:** Debug  
+            **تم البناء تلقائياً من:** آخر commit على main
+          files: VpnPro-Debug.apk
+          make_latest: true
