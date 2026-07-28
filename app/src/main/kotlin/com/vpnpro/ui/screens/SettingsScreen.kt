@@ -44,7 +44,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     ) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
 
-            // ── Top bar ───────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -54,13 +53,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Text(
                     "Settings",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    color = OnSurface,
+                    fontWeight = FontWeight.Bold, fontSize = 20.sp, color = OnSurface,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
             }
-            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
+            Divider(color = Surface3, thickness = 0.5.dp)
 
             Column(
                 Modifier
@@ -68,59 +65,50 @@ fun SettingsScreen(onBack: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 8.dp)
             ) {
-
                 // ── Security ─────────────────────────────────
                 SettingsSectionHeader("Security")
 
-                SettingsToggleItem(
-                    icon      = Icons.Default.Security,
-                    iconTint  = AccentRed,
-                    title     = "Kill Switch",
-                    subtitle  = "Block all internet if VPN disconnects — prevents IP leaks",
-                    checked   = killSwitchEnabled,
-                    onChecked = { killSwitchEnabled = it }
-                )
-                SettingsToggleItem(
-                    icon      = Icons.Default.PrivacyTip,
-                    iconTint  = AccentPurple,
-                    title     = "DNS Leak Protection",
-                    subtitle  = "Force all DNS queries through the VPN tunnel",
-                    checked   = true,
-                    onChecked = {}
-                )
+                SettingsToggle(
+                    Icons.Default.Security, AccentRed,
+                    "Kill Switch",
+                    "Block all internet if VPN disconnects — prevents IP leaks",
+                    killSwitchEnabled
+                ) { killSwitchEnabled = it }
+
+                SettingsToggle(
+                    Icons.Default.PrivacyTip, AccentPurple,
+                    "DNS Leak Protection",
+                    "Force all DNS queries through the VPN tunnel",
+                    true
+                ) {}
 
                 // ── DNS ───────────────────────────────────────
                 SettingsSectionHeader("DNS")
 
                 Box {
-                    SettingsClickItem(
-                        icon     = Icons.Default.Dns,
-                        iconTint = AccentCyan,
-                        title    = "Default DNS",
-                        subtitle = selectedDns,
-                        onClick  = { showDnsMenu = true }
-                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconBox(Icons.Default.Dns, AccentCyan)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Default DNS", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = OnSurface)
+                            Text(selectedDns, fontSize = 12.sp, color = OnSurfaceVariant)
+                        }
+                        IconButton(onClick = { showDnsMenu = true }) {
+                            Icon(Icons.Default.ChevronRight, null, tint = OnSurfaceVariant)
+                        }
+                    }
                     DropdownMenu(
                         expanded         = showDnsMenu,
-                        onDismissRequest = { showDnsMenu = false },
-                        containerColor   = Surface2
+                        onDismissRequest = { showDnsMenu = false }
                     ) {
                         dnsOptions.forEach { dns ->
                             DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        dns,
-                                        color = if (dns == selectedDns) AccentCyan else OnSurface
-                                    )
-                                },
+                                text = { Text(dns, color = if (dns == selectedDns) AccentCyan else OnSurface) },
                                 leadingIcon = if (dns == selectedDns) {
-                                    {
-                                        Icon(
-                                            Icons.Default.Check, null,
-                                            tint = AccentCyan,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    { Icon(Icons.Default.Check, null, Modifier.size(18.dp), tint = AccentCyan) }
                                 } else null,
                                 onClick = { selectedDns = dns; showDnsMenu = false }
                             )
@@ -131,82 +119,60 @@ fun SettingsScreen(onBack: () -> Unit) {
                 // ── Connection ────────────────────────────────
                 SettingsSectionHeader("Connection")
 
-                SettingsToggleItem(
-                    icon      = Icons.Default.Refresh,
-                    iconTint  = AccentGreen,
-                    title     = "Auto-Connect",
-                    subtitle  = "Automatically connect to last server on app start",
-                    checked   = autoConnectEnabled,
-                    onChecked = { autoConnectEnabled = it }
-                )
-                SettingsToggleItem(
-                    icon      = Icons.Default.PlayArrow,
-                    iconTint  = AccentBlue,
-                    title     = "Start on Boot",
-                    subtitle  = "Connect to last server when device starts",
-                    checked   = startOnBootEnabled,
-                    onChecked = { startOnBootEnabled = it }
-                )
+                SettingsToggle(
+                    Icons.Default.Refresh, AccentGreen,
+                    "Auto-Connect",
+                    "Automatically connect to last server on app start",
+                    autoConnectEnabled
+                ) { autoConnectEnabled = it }
+
+                SettingsToggle(
+                    Icons.Default.PlayArrow, AccentBlue,
+                    "Start on Boot",
+                    "Connect to last server when device starts",
+                    startOnBootEnabled
+                ) { startOnBootEnabled = it }
 
                 // ── Advanced ──────────────────────────────────
                 SettingsSectionHeader("Advanced")
 
-                SettingsToggleItem(
-                    icon      = Icons.Default.DeviceHub,
-                    iconTint  = AccentOrange,
-                    title     = "Split Tunneling",
-                    subtitle  = "Choose which apps use the VPN",
-                    checked   = splitTunnelEnabled,
-                    onChecked = { splitTunnelEnabled = it }
-                )
+                SettingsToggle(
+                    Icons.Default.DeviceHub, AccentOrange,
+                    "Split Tunneling",
+                    "Choose which apps use the VPN",
+                    splitTunnelEnabled
+                ) { splitTunnelEnabled = it }
 
                 // ── About ─────────────────────────────────────
                 SettingsSectionHeader("About")
 
-                SettingsInfoRow(Icons.Default.Info,          OnSurfaceVariant, "Version",    "2.0.0")
-                SettingsInfoRow(Icons.Default.Shield,        AccentCyan,       "Protocol",   "WireGuard")
-                SettingsInfoRow(Icons.Default.LockOpen,      AccentGreen,      "Encryption", "ChaCha20-Poly1305")
-                SettingsInfoRow(Icons.Default.Straighten,    OnSurfaceVariant, "Handshake",  "Noise_IKpsk2")
+                InfoRow(Icons.Default.Info,        OnSurfaceVariant, "Version",    "2.0.0")
+                InfoRow(Icons.Default.Shield,       AccentCyan,       "Protocol",   "WireGuard")
+                InfoRow(Icons.Default.LockOpen,     AccentGreen,      "Encryption", "ChaCha20-Poly1305")
+                InfoRow(Icons.Default.Straighten,   OnSurfaceVariant, "Handshake",  "Noise_IKpsk2")
 
                 Spacer(Modifier.height(24.dp))
 
-                // ── Info card ─────────────────────────────────
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = AccentCyan.copy(alpha = 0.08f)
-                    ),
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                    colors = CardDefaults.cardColors(containerColor = AccentCyan.copy(alpha = 0.08f)),
+                    shape  = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Lightbulb, null,
-                                tint = AccentCyan,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Icon(Icons.Default.Lightbulb, null, tint = AccentCyan, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                "How to bypass all restrictions?",
-                                fontWeight = FontWeight.SemiBold,
-                                color = OnSurface,
-                                fontSize = 14.sp
-                            )
+                            Text("How to bypass all restrictions?", fontWeight = FontWeight.SemiBold, color = OnSurface, fontSize = 14.sp)
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "This VPN routes ALL your traffic through the server — " +
                             "images, videos, any website or app. You need your own VPS " +
                             "with WireGuard. See the README for full setup instructions.",
-                            color = OnSurfaceVariant,
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp
+                            color = OnSurfaceVariant, fontSize = 13.sp, lineHeight = 20.sp
                         )
                     }
                 }
-
                 Spacer(Modifier.height(32.dp))
             }
         }
@@ -217,38 +183,30 @@ fun SettingsScreen(onBack: () -> Unit) {
 private fun SettingsSectionHeader(title: String) {
     Text(
         title.uppercase(),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        color = AccentCyan,
+        fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentCyan,
         letterSpacing = 1.5.sp,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp)
     )
 }
 
 @Composable
-private fun SettingsToggleItem(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onChecked: (Boolean) -> Unit
+private fun IconBox(icon: ImageVector, tint: Color) {
+    Surface(shape = MaterialTheme.shapes.medium, color = tint.copy(alpha = 0.12f), modifier = Modifier.size(40.dp)) {
+        Box(contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(22.dp), tint = tint) }
+    }
+}
+
+@Composable
+private fun SettingsToggle(
+    icon: ImageVector, iconTint: Color,
+    title: String, subtitle: String,
+    checked: Boolean, onChecked: (Boolean) -> Unit
 ) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = iconTint.copy(alpha = 0.12f),
-            modifier = Modifier.size(40.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(22.dp), tint = iconTint)
-            }
-        }
+        IconBox(icon, iconTint)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = OnSurface)
@@ -256,8 +214,7 @@ private fun SettingsToggleItem(
         }
         Spacer(Modifier.width(8.dp))
         Switch(
-            checked = checked,
-            onCheckedChange = onChecked,
+            checked = checked, onCheckedChange = onChecked,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = AccentCyan,
                 checkedTrackColor = AccentCyan.copy(alpha = 0.35f)
@@ -267,59 +224,12 @@ private fun SettingsToggleItem(
 }
 
 @Composable
-private fun SettingsClickItem(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
+private fun InfoRow(icon: ImageVector, iconTint: Color, title: String, value: String) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = iconTint.copy(alpha = 0.12f),
-            modifier = Modifier.size(40.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(22.dp), tint = iconTint)
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = OnSurface)
-            Text(subtitle, fontSize = 12.sp, color = OnSurfaceVariant)
-        }
-        Icon(Icons.Default.ChevronRight, null, tint = OnSurfaceVariant)
-    }
-}
-
-@Composable
-private fun SettingsInfoRow(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    value: String
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = iconTint.copy(alpha = 0.10f),
-            modifier = Modifier.size(40.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(22.dp), tint = iconTint)
-            }
-        }
+        IconBox(icon, iconTint)
         Spacer(Modifier.width(14.dp))
         Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = OnSurface, modifier = Modifier.weight(1f))
         Text(value, fontSize = 14.sp, color = OnSurfaceVariant)

@@ -1,45 +1,32 @@
 package com.vpnpro.vpn
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.app.*
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
-import android.os.ParcelFileDescriptor
-import android.util.Log
+import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.vpnpro.MainActivity
-import com.vpnpro.R
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
+import com.wireguard.config.Config
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import org.wireguard.android.backend.GoBackend
-import org.wireguard.android.backend.Tunnel
-import org.wireguard.config.Config
-import org.wireguard.crypto.Key
+import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
 import java.io.StringReader
-
-enum class VpnState { IDLE, CONNECTING, CONNECTED, DISCONNECTING, ERROR }
-
-data class VpnStats(
-    val bytesIn: Long = 0L,
-    val bytesOut: Long = 0L,
-    val connectedSince: Long = 0L
-)
 
 class VpnProService : VpnService() {
 
     companion object {
         const val ACTION_CONNECT    = "com.vpnpro.CONNECT"
         const val ACTION_DISCONNECT = "com.vpnpro.DISCONNECT"
-        const val EXTRA_CONFIG      = "config"
+        const val EXTRA_CONFIG      = "wireguard_config"
         const val EXTRA_SERVER_NAME = "server_name"
+        private const val CHANNEL_ID = "vpnpro_channel"
+        private const val NOTIF_ID   = 1001
 
-        private val _state = MutableStateFlow(VpnState.IDLE)
+        private val _state = MutableStateFlow(VpnState.DISCONNECTED)
         val state: StateFlow<VpnState> = _state.asStateFlow()
 
         private val _stats = MutableStateFlow(VpnStats())
@@ -50,114 +37,87 @@ class VpnProService : VpnService() {
 
         private val _connectedServerName = MutableStateFlow<String?>(null)
         val connectedServerName: StateFlow<String?> = _connectedServerName.asStateFlow()
-
-        private const val TAG = "VpnProService"
-        private const val CHANNEL_ID = "vpn_pro_channel"
-        private const val NOTIF_ID = 1001
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var backend: GoBackend? = null
-    private var tunnel: Tunnel? = null
-    private var currentConfig: String? = null
-    private var currentServerName: String? = null
-
-    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var activeTunnel: VpnProTunnel? = null
     private var statsJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        try {
-            backend = GoBackend(this)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to init GoBackend: ${e.message}")
-        }
+        backend = GoBackend(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_CONNECT -> {
-                val config = intent.getStringExtra(EXTRA_CONFIG) ?: return START_NOT_STICKY
-                val name   = intent.getStringExtra(EXTRA_SERVER_NAME) ?: "Server"
-                currentConfig = config
-                currentServerName = name
-                serviceScope.launch { doConnect(config, name) }
-            }
-            ACTION_DISCONNECT -> {
-                serviceScope.launch { doDisconnect() }
-            }
+            ACTION_CONNECT    -> handleConnect(intent)
+            ACTION_DISCONNECT -> handleDisconnect()
         }
         return START_STICKY
     }
 
-    private suspend fun doConnect(configText: String, serverName: String) {
-        _state.value = VpnState.CONNECTING
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onRevoke() {
+        handleDisconnect()
+    }
+
+    private fun handleConnect(intent: Intent) {
+        val configText = intent.getStringExtra(EXTRA_CONFIG) ?: return
+        val serverName = intent.getStringExtra(EXTRA_SERVER_NAME) ?: "VPN Pro"
+
+        _state.value     = VpnState.CONNECTING
         _lastError.value = null
-        try {
-            startForeground(NOTIF_ID, buildNotification("Connecting to $serverName…"))
+        showNotification("Connecting to $serverName…")
 
-            val cfg = Config.parse(BufferedReader(StringReader(configText)))
-            val t = object : Tunnel {
-                override fun getName() = "vpnpro"
-                override fun onStateChange(newState: Tunnel.State) {
-                    _state.value = when (newState) {
-                        Tunnel.State.UP   -> VpnState.CONNECTED
-                        Tunnel.State.DOWN -> VpnState.IDLE
-                        else              -> VpnState.IDLE
-                    }
-                }
+        scope.launch {
+            try {
+                val config = Config.parse(BufferedReader(StringReader(configText)))
+                val tunnel = VpnProTunnel(serverName)
+                backend?.setState(tunnel, Tunnel.State.UP, config)
+                activeTunnel             = tunnel
+                _state.value             = VpnState.CONNECTED
+                _connectedServerName.value = serverName
+                _stats.value             = VpnStats(connectedSince = System.currentTimeMillis())
+                showNotification("Connected — $serverName")
+                startStatsPolling()
+            } catch (e: Exception) {
+                _state.value     = VpnState.ERROR
+                _lastError.value = e.message ?: "Connection failed"
+                showNotification("Connection failed")
             }
-            tunnel = t
-            backend?.setState(t, Tunnel.State.UP, cfg)
-
-            _state.value = VpnState.CONNECTED
-            _connectedServerName.value = serverName
-            _stats.value = VpnStats(connectedSince = System.currentTimeMillis())
-
-            updateNotification("Connected — $serverName")
-            startStatsPolling(t)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Connect failed: ${e.message}")
-            _state.value = VpnState.ERROR
-            _lastError.value = e.message ?: "Connection failed"
-            updateNotification("Connection failed")
-            stopForeground(true)
         }
     }
 
-    private suspend fun doDisconnect() {
-        _state.value = VpnState.DISCONNECTING
+    private fun handleDisconnect() {
         statsJob?.cancel()
-        try {
-            tunnel?.let { backend?.setState(it, Tunnel.State.DOWN, null) }
-        } catch (e: Exception) {
-            Log.w(TAG, "Disconnect error: ${e.message}")
+        scope.launch {
+            try {
+                activeTunnel?.let { backend?.setState(it, Tunnel.State.DOWN, null) }
+            } catch (_: Exception) {}
+            activeTunnel              = null
+            _state.value              = VpnState.DISCONNECTED
+            _connectedServerName.value = null
+            _stats.value              = VpnStats()
         }
-        tunnel = null
-        _state.value = VpnState.IDLE
-        _stats.value = VpnStats()
-        _connectedServerName.value = null
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    private fun startStatsPolling(t: Tunnel) {
+    private fun startStatsPolling() {
         statsJob?.cancel()
-        statsJob = serviceScope.launch {
+        statsJob = scope.launch {
             while (isActive) {
-                try {
-                    val s = backend?.getStatistics(t)
-                    if (s != null) {
-                        var totalIn = 0L; var totalOut = 0L
-                        for (peer in s.peers()) {
-                            totalIn  += s.peer(peer)?.rxBytes ?: 0L
-                            totalOut += s.peer(peer)?.txBytes ?: 0L
-                        }
-                        _stats.value = _stats.value.copy(bytesIn = totalIn, bytesOut = totalOut)
-                    }
-                } catch (_: Exception) {}
                 delay(2000)
+                try {
+                    val tun  = activeTunnel ?: break
+                    val s    = backend?.getStatistics(tun)
+                    val rx   = s?.totalRx() ?: 0L
+                    val tx   = s?.totalTx() ?: 0L
+                    _stats.value = _stats.value.copy(bytesIn = rx, bytesOut = tx)
+                } catch (_: Exception) {}
             }
         }
     }
@@ -165,35 +125,55 @@ class VpnProService : VpnService() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(
-                CHANNEL_ID, "VPN Pro Status",
-                NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "VPN Pro", NotificationManager.IMPORTANCE_LOW
             ).apply { description = "VPN connection status" }
-            getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
         }
     }
 
-    private fun buildNotification(text: String): Notification {
-        val pi = PendingIntent.getActivity(
+    private fun showNotification(status: String) {
+        val stopIntent = PendingIntent.getService(
             this, 0,
-            Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP },
+            Intent(this, VpnProService::class.java).also { it.action = ACTION_DISCONNECT },
             PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val openIntent = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("VPN Pro")
-            .setContentText(text)
+            .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setContentIntent(pi)
+            .setContentIntent(openIntent)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_delete, "Disconnect", stopIntent)
             .build()
-    }
 
-    private fun updateNotification(text: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm?.notify(NOTIF_ID, buildNotification(text))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
     }
 
     override fun onDestroy() {
-        serviceScope.cancel()
+        scope.cancel()
         super.onDestroy()
     }
+}
+
+// ── Support types ────────────────────────────────────────────────────────────
+
+enum class VpnState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
+
+data class VpnStats(
+    val bytesIn: Long       = 0L,
+    val bytesOut: Long      = 0L,
+    val connectedSince: Long = 0L
+)
+
+class VpnProTunnel(private val name: String) : Tunnel {
+    private var state = Tunnel.State.DOWN
+    override fun getName(): String = name
+    override fun onStateChange(newState: Tunnel.State) { state = newState }
 }

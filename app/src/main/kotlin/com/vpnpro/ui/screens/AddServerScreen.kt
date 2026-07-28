@@ -57,14 +57,13 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
     if (showImportDialog) {
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
-            icon = { Icon(Icons.Default.ContentPaste, null, tint = AccentCyan) },
+            icon  = { Icon(Icons.Default.ContentPaste, null, tint = AccentCyan) },
             title = { Text("Import WireGuard Config") },
-            text = {
+            text  = {
                 Column {
                     Text(
                         "Paste your WireGuard config file here ([Interface] + [Peer] block).",
-                        fontSize = 13.sp,
-                        color = OnSurfaceVariant
+                        fontSize = 13.sp, color = OnSurfaceVariant
                     )
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
@@ -76,8 +75,7 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                                 fontSize = 12.sp, color = OnSurfaceMuted
                             )
                         },
-                        minLines = 6,
-                        maxLines = 10,
+                        minLines = 6, maxLines = 10,
                         colors = fieldColors(),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -104,8 +102,7 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
             },
             dismissButton = {
                 TextButton(onClick = { showImportDialog = false }) { Text("Cancel") }
-            },
-            containerColor = Surface2
+            }
         )
     }
 
@@ -130,16 +127,14 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                 }
                 Text(
                     "Add Server",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    color = OnSurface,
+                    fontWeight = FontWeight.Bold, fontSize = 20.sp, color = OnSurface,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
                 FilledTonalButton(
                     onClick = { showImportDialog = true },
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = AccentCyan.copy(alpha = 0.12f),
-                        contentColor = AccentCyan
+                        contentColor   = AccentCyan
                     )
                 ) {
                     Icon(Icons.Default.Download, null, Modifier.size(18.dp))
@@ -148,34 +143,20 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(8.dp))
             }
-            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
+            Divider(color = Surface3, thickness = 0.5.dp)
 
             // ── Error banner ───────────────────────────────────
             if (error != null) {
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = AccentRed.copy(alpha = 0.15f)
-                    ),
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                    colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                    shape  = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Row(
-                        Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Warning, null,
-                            tint = AccentRed,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, null, tint = AccentRed, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(error ?: "", color = AccentRed, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                        IconButton(
-                            onClick = vm::clearAddServerResult,
-                            modifier = Modifier.size(24.dp)
-                        ) {
+                        IconButton(onClick = vm::clearAddServerResult, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Close, null, tint = AccentRed, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -191,14 +172,12 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 SectionHeader("Basic Info", Icons.Default.Info)
-
-                ProField("Server Name *",  name,     { name = it },     "e.g. Germany-01",          Icons.Default.Label)
-                ProField("Flag Emoji",      flag,     { flag = it },     "🌐",                        Icons.Default.Flag)
-                ProField("Location",        location, { location = it }, "e.g. Frankfurt",            Icons.Default.LocationOn)
-                ProField("Added by",        addedBy,  { addedBy = it },  "Your name or nickname",     Icons.Default.Person)
+                ProField("Server Name *", name,     { name = it },     "e.g. Germany-01",           Icons.Default.Label)
+                ProField("Flag Emoji",    flag,     { flag = it },     "🌐",                         Icons.Default.Flag)
+                ProField("Location",      location, { location = it }, "e.g. Frankfurt",             Icons.Default.LocationOn)
+                ProField("Added by",      addedBy,  { addedBy = it },  "Your name or nickname",      Icons.Default.Person)
 
                 SectionHeader("Connection", Icons.Default.Wifi)
-
                 ProField(
                     "Endpoint (host:port) *", endpoint, { endpoint = it },
                     "e.g. 1.2.3.4:51820 or vpn.example.com:51820",
@@ -207,25 +186,18 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                 )
 
                 SectionHeader("WireGuard Keys", Icons.Default.Lock)
-
                 ProField(
                     "Server Public Key *", serverPublicKey, { serverPublicKey = it },
                     "Base64 public key (44 chars)",
-                    Icons.Default.VpnKey,
-                    maxLines = 2
+                    Icons.Default.VpnKey, maxLines = 2
                 )
 
-                // Client private key with show/hide
+                // Client private key
                 OutlinedTextField(
-                    value = clientPrivateKey,
-                    onValueChange = { clientPrivateKey = it },
+                    value = clientPrivateKey, onValueChange = { clientPrivateKey = it },
                     label = { Text("Client Private Key *", fontSize = 12.sp) },
-                    placeholder = {
-                        Text("Base64 private key (44 chars)", fontSize = 13.sp, color = OnSurfaceMuted)
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Default.Key, null, Modifier.size(20.dp), tint = OnSurfaceVariant)
-                    },
+                    placeholder = { Text("Base64 private key (44 chars)", fontSize = 13.sp, color = OnSurfaceMuted) },
+                    leadingIcon  = { Icon(Icons.Default.Key, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
                     trailingIcon = {
                         IconButton(onClick = { showPrivKey = !showPrivKey }) {
                             Icon(
@@ -234,24 +206,16 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                             )
                         }
                     },
-                    visualTransformation = if (showPrivKey) VisualTransformation.None
-                                           else PasswordVisualTransformation(),
-                    maxLines = 2,
-                    colors = fieldColors(),
-                    modifier = Modifier.fillMaxWidth()
+                    visualTransformation = if (showPrivKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    maxLines = 2, colors = fieldColors(), modifier = Modifier.fillMaxWidth()
                 )
 
                 // Pre-shared key
                 OutlinedTextField(
-                    value = preSharedKey,
-                    onValueChange = { preSharedKey = it },
+                    value = preSharedKey, onValueChange = { preSharedKey = it },
                     label = { Text("Pre-Shared Key (optional)", fontSize = 12.sp) },
-                    placeholder = {
-                        Text("Leave blank if not used", fontSize = 13.sp, color = OnSurfaceMuted)
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Default.Shield, null, Modifier.size(20.dp), tint = OnSurfaceVariant)
-                    },
+                    placeholder = { Text("Leave blank if not used", fontSize = 13.sp, color = OnSurfaceMuted) },
+                    leadingIcon  = { Icon(Icons.Default.Shield, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
                     trailingIcon = {
                         IconButton(onClick = { showPSK = !showPSK }) {
                             Icon(
@@ -260,50 +224,32 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                             )
                         }
                     },
-                    visualTransformation = if (showPSK) VisualTransformation.None
-                                           else PasswordVisualTransformation(),
-                    maxLines = 2,
-                    colors = fieldColors(),
-                    modifier = Modifier.fillMaxWidth()
+                    visualTransformation = if (showPSK) VisualTransformation.None else PasswordVisualTransformation(),
+                    maxLines = 2, colors = fieldColors(), modifier = Modifier.fillMaxWidth()
                 )
 
                 SectionHeader("Network Settings", Icons.Default.NetworkCheck)
-
-                ProField("Client Address",  clientAddress, { clientAddress = it },
-                    "e.g. 10.0.0.2/32",    Icons.Default.Computer)
-                ProField("DNS",             dns,            { dns = it },
-                    "e.g. 1.1.1.1, 8.8.8.8", Icons.Default.Language)
-                ProField("Allowed IPs",     allowedIPs,    { allowedIPs = it },
-                    "0.0.0.0/0, ::/0 = all traffic through VPN", Icons.Default.Share)
-                ProField("MTU",             mtuValue,       { mtuValue = it },
-                    "1420 (recommended)",   Icons.Default.Tune,
+                ProField("Client Address", clientAddress, { clientAddress = it }, "e.g. 10.0.0.2/32",           Icons.Default.Computer)
+                ProField("DNS",            dns,           { dns = it },           "e.g. 1.1.1.1, 8.8.8.8",     Icons.Default.Language)
+                ProField("Allowed IPs",    allowedIPs,    { allowedIPs = it },    "0.0.0.0/0, ::/0 = all traffic", Icons.Default.Share)
+                ProField("MTU",            mtuValue,      { mtuValue = it },      "1420 (recommended)",         Icons.Default.Tune,
                     keyboardType = KeyboardType.Number)
 
-                Spacer(Modifier.height(8.dp))
-
-                // Tip card
+                Spacer(Modifier.height(4.dp))
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = AccentCyan.copy(alpha = 0.07f)
-                    ),
-                    shape = MaterialTheme.shapes.medium
+                    colors = CardDefaults.cardColors(containerColor = AccentCyan.copy(alpha = 0.07f)),
+                    shape  = MaterialTheme.shapes.medium
                 ) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                        Icon(
-                            Icons.Default.Info, null,
-                            Modifier.size(16.dp), tint = AccentCyan
-                        )
+                        Icon(Icons.Default.Info, null, Modifier.size(16.dp), tint = AccentCyan)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Set Allowed IPs to 0.0.0.0/0, ::/0 to route ALL traffic (images, videos, any website) through the VPN.",
-                            fontSize = 12.sp,
-                            color = OnSurfaceVariant,
-                            lineHeight = 18.sp
+                            fontSize = 12.sp, color = OnSurfaceVariant, lineHeight = 18.sp
                         )
                     }
                 }
-
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             // ── Save button ────────────────────────────────────
@@ -328,24 +274,17 @@ fun AddServerScreen(vm: MainViewModel, onBack: () -> Unit) {
                             )
                         )
                     },
-                    enabled = !loading &&
-                              name.isNotBlank() &&
-                              endpoint.isNotBlank() &&
-                              serverPublicKey.isNotBlank() &&
-                              clientPrivateKey.isNotBlank(),
+                    enabled = !loading && name.isNotBlank() && endpoint.isNotBlank() &&
+                              serverPublicKey.isNotBlank() && clientPrivateKey.isNotBlank(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                         .height(52.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
-                    shape = MaterialTheme.shapes.large
+                    shape  = MaterialTheme.shapes.large
                 ) {
                     if (loading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = Color.White,
-                            strokeWidth = 2.5.dp
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.5.dp)
                     } else {
                         Icon(Icons.Default.CloudUpload, null, Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
@@ -367,31 +306,24 @@ private fun SectionHeader(title: String, icon: ImageVector) {
         Spacer(Modifier.width(6.dp))
         Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AccentCyan)
         Spacer(Modifier.width(8.dp))
-        HorizontalDivider(color = Surface3, modifier = Modifier.weight(1f))
+        Divider(color = Surface3, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun ProField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    icon: ImageVector,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    maxLines: Int = 1
+    label: String, value: String, onValueChange: (String) -> Unit,
+    placeholder: String, icon: ImageVector,
+    keyboardType: KeyboardType = KeyboardType.Text, maxLines: Int = 1
 ) {
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = value, onValueChange = onValueChange,
         label = { Text(label, fontSize = 12.sp) },
         placeholder = { Text(placeholder, fontSize = 13.sp, color = OnSurfaceMuted) },
         leadingIcon = { Icon(icon, null, Modifier.size(20.dp), tint = OnSurfaceVariant) },
-        singleLine = maxLines == 1,
-        maxLines = maxLines,
+        singleLine = maxLines == 1, maxLines = maxLines,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        colors = fieldColors(),
-        modifier = Modifier.fillMaxWidth()
+        colors = fieldColors(), modifier = Modifier.fillMaxWidth()
     )
 }
 

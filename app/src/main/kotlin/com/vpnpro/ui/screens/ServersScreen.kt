@@ -9,13 +9,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,16 +62,14 @@ fun ServersScreen(
                 }
                 Text(
                     "Servers",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    color = OnSurface,
+                    fontWeight = FontWeight.Bold, fontSize = 20.sp, color = OnSurface,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
                 FilledTonalButton(
                     onClick = onAddServer,
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = AccentCyan.copy(alpha = 0.15f),
-                        contentColor = AccentCyan
+                        contentColor   = AccentCyan
                     )
                 ) {
                     Icon(Icons.Default.Add, null, Modifier.size(18.dp))
@@ -88,23 +85,23 @@ fun ServersScreen(
                 onValueChange = { searchQuery = it },
                 placeholder = { Text("Search servers...", color = OnSurfaceMuted, fontSize = 14.sp) },
                 leadingIcon = {
-                    Icon(Icons.Default.Search, null, tint = OnSurfaceMuted, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = OnSurfaceMuted)
                 },
                 trailingIcon = if (searchQuery.isNotBlank()) {
                     {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, null, tint = OnSurfaceMuted, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Clear, null, Modifier.size(18.dp), tint = OnSurfaceMuted)
                         }
                     }
                 } else null,
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Surface1,
+                    focusedContainerColor   = Surface1,
                     unfocusedContainerColor = Surface1,
-                    focusedBorderColor = AccentCyan,
-                    unfocusedBorderColor = Surface3,
-                    focusedTextColor = OnSurface,
-                    unfocusedTextColor = OnSurface
+                    focusedBorderColor      = AccentCyan,
+                    unfocusedBorderColor    = Surface3,
+                    focusedTextColor        = OnSurface,
+                    unfocusedTextColor      = OnSurface
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,14 +109,12 @@ fun ServersScreen(
                 shape = MaterialTheme.shapes.medium
             )
 
-            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
+            Divider(color = Surface3, thickness = 0.5.dp)
 
-            // ── Server count ──────────────────────────────────
             if (filteredServers.isNotEmpty()) {
                 Text(
                     "${filteredServers.size} server${if (filteredServers.size == 1) "" else "s"}",
-                    color = OnSurfaceMuted,
-                    fontSize = 12.sp,
+                    color = OnSurfaceMuted, fontSize = 12.sp,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
             }
@@ -132,15 +127,12 @@ fun ServersScreen(
                         Spacer(Modifier.height(16.dp))
                         Text(
                             if (searchQuery.isBlank()) "No servers yet" else "No results found",
-                            fontSize = 18.sp,
-                            color = OnSurfaceVariant,
-                            fontWeight = FontWeight.SemiBold
+                            fontSize = 18.sp, color = OnSurfaceVariant, fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             if (searchQuery.isBlank()) "Tap 'Add' to add your first server"
                             else "Try a different search term",
-                            fontSize = 14.sp,
-                            color = OnSurfaceMuted
+                            fontSize = 14.sp, color = OnSurfaceMuted
                         )
                         if (searchQuery.isBlank()) {
                             Spacer(Modifier.height(24.dp))
@@ -164,11 +156,11 @@ fun ServersScreen(
                 ) {
                     items(filteredServers, key = { it.id }) { server ->
                         ServerCard(
-                            server = server,
+                            server     = server,
                             isSelected = selectedServer?.id == server.id,
                             isConnected = vpnState == VpnState.CONNECTED &&
                                           selectedServer?.id == server.id,
-                            onSelect = { vm.selectServer(server) }
+                            onSelect   = { vm.selectServer(server) }
                         )
                     }
                 }
@@ -185,10 +177,8 @@ private fun ServerCard(
     onSelect: () -> Unit
 ) {
     Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Surface3 else Surface2
-        ),
+        shape  = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = if (isSelected) Surface3 else Surface2),
         modifier = Modifier
             .fillMaxWidth()
             .then(
@@ -217,16 +207,12 @@ private fun ServerCard(
 
             Spacer(Modifier.width(14.dp))
 
-            // Info
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         server.name,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp,
-                        color = OnSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = OnSurface,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
                     if (server.isPremium) {
@@ -236,9 +222,7 @@ private fun ServerCard(
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text(
-                                "  PRO  ",
-                                fontSize = 10.sp,
-                                color = AccentOrange,
+                                "  PRO  ", fontSize = 10.sp, color = AccentOrange,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(vertical = 2.dp)
                             )
@@ -247,35 +231,21 @@ private fun ServerCard(
                 }
                 Text(
                     server.location.ifBlank { server.endpoint },
-                    fontSize = 12.sp,
-                    color = OnSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    fontSize = 12.sp, color = OnSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // WireGuard badge
-                    Surface(
-                        color = AccentCyan.copy(alpha = 0.12f),
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text(
-                            "  WireGuard  ",
-                            fontSize = 10.sp,
-                            color = AccentCyan,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
+                    Surface(color = AccentCyan.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small) {
+                        Text("  WireGuard  ", fontSize = 10.sp, color = AccentCyan,
+                            modifier = Modifier.padding(vertical = 2.dp))
                     }
-                    // Usage count
                     if (server.usageCount > 0) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.People, null,
-                                Modifier.size(11.dp), tint = OnSurfaceMuted
-                            )
+                            Icon(Icons.Default.People, null, Modifier.size(11.dp), tint = OnSurfaceMuted)
                             Spacer(Modifier.width(2.dp))
                             Text("${server.usageCount}", fontSize = 10.sp, color = OnSurfaceMuted)
                         }
@@ -283,7 +253,6 @@ private fun ServerCard(
                 }
             }
 
-            // Selected check
             if (isSelected) {
                 Spacer(Modifier.width(8.dp))
                 Icon(
