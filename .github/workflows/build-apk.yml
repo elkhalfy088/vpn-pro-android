@@ -2,19 +2,22 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build APK with Expo + Gradle
+    name: Build Android APK
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -24,66 +27,93 @@ jobs:
         with:
           version: 10
 
-      - name: Install dependencies
+      - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
 
-      - name: Expo prebuild (Android)
+      - name: Install Android build tools
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
+
+      - name: Expo Prebuild (non-interactive, no install)
         working-directory: artifacts/vpn-pro-android
-        run: npx expo prebuild --platform android --clean
         env:
-          EXPO_PUBLIC_DOMAIN: ${{ secrets.EXPO_PUBLIC_DOMAIN || 'localhost' }}
+          CI: "1"
+          EXPO_NO_GIT_STATUS: "1"
+          EXPO_PUBLIC_DOMAIN: "localhost"
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+          echo "Prebuild complete"
 
-      - name: Build APK with Gradle
+      - name: Make Gradle executable
         working-directory: artifacts/vpn-pro-android/android
-        run: ./gradlew assembleRelease --no-daemon
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"
+        run: chmod +x gradlew
 
-      - name: Find APK
-        id: find_apk
+      - name: Build Debug APK
+        working-directory: artifacts/vpn-pro-android/android
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
+        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1
+
+      - name: Locate APK
+        id: apk
         run: |
           APK=$(find artifacts/vpn-pro-android/android -name "*.apk" | head -1)
-          echo "apk_path=$APK" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK"
+          echo "path=$APK" >> $GITHUB_OUTPUT
+          echo "APK: $APK"
+          ls -lh "$APK" || echo "APK not found"
 
-      - name: Upload APK as artifact
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp "${{ steps.apk.outputs.path }}" "release/VPN-Pro-v1.${{ github.run_number }}.apk"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vpn-pro-android-apk
-          path: ${{ steps.find_apk.outputs.apk_path }}
-          retention-days: 30
+          name: VPN-Pro-APK
+          path: release/VPN-Pro-v1.${{ github.run_number }}.apk
+          retention-days: 90
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v${{ github.run_number }}
-          name: VPN Pro v${{ github.run_number }}
+          tag_name: v1.${{ github.run_number }}
+          name: "🛡️ VPN Pro v1.${{ github.run_number }}"
           body: |
-            ## VPN Pro Android APK
-            
-            Download the APK below and install it on your Android device.
-            
-            > Enable "Install from unknown sources" in Android settings before installing.
-            
-            ### What's included
-            - V2Ray / VMess / VLESS support
-            - Trojan, Shadowsocks, Hysteria2
-            - HTTP Proxy & SOCKS5
-            - Shared server list across all users
-          files: ${{ steps.find_apk.outputs.apk_path }}
+            ## 🛡️ VPN Pro - تطبيق إدارة VPN
+
+            ### تحميل APK
+            انقر على الملف أدناه لتحميل التطبيق مباشرة على جهازك.
+
+            > **ملاحظة:** قبل التثبيت، فعّل "تثبيت من مصادر غير معروفة" في إعدادات Android.
+
+            ---
+
+            ### البروتوكولات المدعومة
+            - ✅ V2Ray / VMess / VLESS
+            - ✅ Trojan
+            - ✅ Shadowsocks
+            - ✅ Hysteria2
+            - ✅ HTTP Proxy (ip:port@user:pass)
+            - ✅ SOCKS5
+
+            ### المميزات
+            - 🌐 قائمة سيرفرات مشتركة لجميع المستخدمين
+            - ➕ إضافة وتعديل وحذف السيرفرات
+            - 🔄 التنقل بين السيرفرات بنقرة واحدة
+            - 🎨 واجهة داكنة احترافية
+          files: release/VPN-Pro-v1.${{ github.run_number }}.apk
           draft: false
           prerelease: false
         env:
