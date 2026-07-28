@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -20,22 +20,62 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          gradle-version: '8.4'
-          cache-read-only: false
+          go-version: '1.21'
 
-      - name: Setup WireGuard Maven credentials
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
         run: |
-          mkdir -p ~/.gradle
-          echo "gpr.user=${{ github.repository_owner }}" >> ~/.gradle/gradle.properties
-          echo "gpr.key=${{ secrets.GITHUB_TOKEN }}" >> ~/.gradle/gradle.properties
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "ndk;25.2.9519653" "cmake;3.22.1" 2>/dev/null | tail -3
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      - name: Cache WireGuard tunnel AAR
+        id: wg-cache
+        uses: actions/cache@v4
+        with:
+          path: wireguard-tunnel.aar
+          key: wireguard-tunnel-1.0.20230213-${{ runner.os }}
+
+      - name: Build WireGuard tunnel from source
+        if: steps.wg-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 1.0.20230213 \
+            https://github.com/WireGuard/wireguard-android.git /tmp/wg-android
+          cd /tmp/wg-android
+          cat > local.properties << EOF
+          sdk.dir=$ANDROID_HOME
+          ndk.dir=$ANDROID_NDK_HOME
+          EOF
+          chmod +x gradlew
+          ./gradlew :tunnel:assembleRelease --no-daemon -q
+          cp tunnel/build/outputs/aar/tunnel-release.aar $GITHUB_WORKSPACE/wireguard-tunnel.aar
+          echo "WireGuard tunnel AAR built: $(ls -lh $GITHUB_WORKSPACE/wireguard-tunnel.aar)"
+
+      - name: Copy WireGuard AAR to project libs
+        run: |
+          mkdir -p app/libs
+          cp wireguard-tunnel.aar app/libs/
+          ls -lh app/libs/
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -44,7 +84,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
-      - name: Create GitHub Release with APK
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
@@ -53,11 +93,12 @@ jobs:
           body: |
             ## ✅ VPN Pro APK جاهز للتحميل
 
-            تطبيق VPN Pro مبني بـ WireGuard + Firebase
+            تطبيق VPN Pro — WireGuard + Firebase
 
             ### تثبيت:
-            1. حمّل الـ APK من الملفات أسفله
+            1. حمّل `app-debug.apk` من الأسفل
             2. فعّل "مصادر غير معروفة" في إعدادات Android
             3. ثبّت التطبيق
+            4. أضف سيرفراتك من **Servers → Add**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

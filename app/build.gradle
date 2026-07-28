@@ -46,6 +46,10 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
+        // Include WireGuard native libs from the AAR
+        jniLibs {
+            keepDebugSymbols += ['**/*.so']
+        }
     }
 }
 
@@ -79,8 +83,8 @@ dependencies {
     // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
 
-    // WireGuard Tunnel — official Maven package
-    implementation 'com.wireguard.android:tunnel:1.0.20230213'
+    // WireGuard Tunnel — built from source in CI, included as local AAR
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
 
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
