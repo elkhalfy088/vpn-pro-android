@@ -4,6 +4,7 @@ import com.google.firebase.database.*
 import com.vpnpro.data.model.Server
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +29,9 @@ class FirebaseRepository @Inject constructor() {
                 }
                 trySend(list.sortedByDescending { it.addedAt })
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
         }
         serversRef.addValueEventListener(listener)
         awaitClose { serversRef.removeEventListener(listener) }
@@ -36,13 +39,14 @@ class FirebaseRepository @Inject constructor() {
 
     /** Add a new server — visible to all users immediately */
     suspend fun addServer(server: Server) {
-        val key = serversRef.push().key ?: return
+        val key = serversRef.push().key
+            ?: throw IllegalStateException("Failed to generate server key — check Firebase connection")
         val newServer = server.copy(id = key)
-        serversRef.child(key).setValue(newServer.toMap())
+        serversRef.child(key).setValue(newServer.toMap()).await()
     }
 
-    /** Toggle server enabled state (admin only by Firebase rules) */
+    /** Toggle server enabled state */
     suspend fun setServerEnabled(id: String, enabled: Boolean) {
-        serversRef.child(id).child("enabled").setValue(enabled)
+        serversRef.child(id).child("enabled").setValue(enabled).await()
     }
 }
