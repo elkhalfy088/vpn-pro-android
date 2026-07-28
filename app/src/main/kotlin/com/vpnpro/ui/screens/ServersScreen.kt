@@ -83,7 +83,7 @@ fun ServersScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                         Text("No servers yet", fontSize = 18.sp, color = OnSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                        Text("Tap "Add" to add the first server", fontSize = 14.sp, color = OnSurfaceMuted)
+                        Text("Tap 'Add' to add the first server", fontSize = 14.sp, color = OnSurfaceMuted)
                         Spacer(Modifier.height(24.dp))
                         Button(
                             onClick = onAddServer,
