@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace 'com.vpnpro'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.vpnpro"
         minSdk 26
-        targetSdk 34
+        targetSdk 36
         versionCode 1
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -46,7 +46,6 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
-        // Include WireGuard native libs from the AAR
         jniLibs {
             keepDebugSymbols += ['**/*.so']
         }
