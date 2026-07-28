@@ -150,7 +150,7 @@ fun ServersScreen(
                     Icon(Icons.Default.Add, null, tint = AccentCyan)
                 }
             }
-            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
+            Divider(color = Surface3, thickness = 0.5.dp)
 
             // ── Search ─────────────────────────────────────────────────────
             OutlinedTextField(

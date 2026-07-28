@@ -78,7 +78,7 @@ fun FreeServersScreen(
                     }
                 }
             }
-            HorizontalDivider(color = Surface3, thickness = 0.5.dp)
+            Divider(color = Surface3, thickness = 0.5.dp)
 
             // ── Tabs ────────────────────────────────────────────────────────
             TabRow(
