@@ -40,7 +40,7 @@ function ActiveStatusCard({ activeServer }: { activeServer: Server | null | unde
   React.useEffect(() => {
     if (isConnected) {
       glowAnim.value = withRepeat(
-        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sine) }),
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
         -1,
         true
       );

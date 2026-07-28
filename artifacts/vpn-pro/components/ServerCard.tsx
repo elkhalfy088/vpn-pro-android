@@ -55,7 +55,7 @@ export function ServerCard({ server, onDelete }: ServerCardProps) {
   React.useEffect(() => {
     if (isActive) {
       pulseOpacity.value = withRepeat(
-        withTiming(0.2, { duration: 1200, easing: Easing.inOut(Easing.sine) }),
+        withTiming(0.2, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
         -1,
         true
       );
